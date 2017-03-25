@@ -1,14 +1,21 @@
+let csrf = require('csurf');
+let bodyParser = require('body-parser');
 let config = require('./libs/config');
 let express = require('express');
 let path = require('path');
 let cookieParser = require('cookie-parser');
-let bodyParser = require('body-parser');
 let log = require('./libs/log')(module);
 let ArticleModel = require('./libs/mongoose').ArticleModel;
 let session = require('express-session');
-let csrf = require('csurf');
-let csrfProtection = csrf({ cookie: true });
 let app = express();
+
+app.set('view engine', 'ejs');
+
+let parseJson = bodyParser.json();
+let parseUrlencoded = bodyParser.urlencoded({ extended: true });
+let parseBody = [parseJson, parseUrlencoded];
+
+let csrfProtection = csrf({ cookie: true });
 
 let sess = {
   secret: 'keyboard cat',
@@ -22,20 +29,32 @@ if (app.get('env') !== 'development') {
   sess.cookie.secure = true;
 }
 
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
 app.use(session(sess));
 app.use(cookieParser());
 app.use(csrfProtection);
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(function(req, res, next) {
+  res.locals._csrf = req.csrfToken();
+  next();
+});
 
 app.get('/api', function (req, res) {
   res.send('API is running');
 });
 
-app.get('/form', csrfProtection, function (req, res) {
-  res.send({ csrfToken: req.csrfToken() });
+app.get('/form', csrfProtection, function(req, res) {
+  // pass the csrfToken to the view
+  let tkn = req.csrfToken();
+  res.render('index', { csrfToken: tkn })
+});
+
+app.post('/process', parseBody, csrfProtection, function(req, res){
+  res.send('<p>Your favorite color is "' + req.body.favoriteColor + '".');
 });
 
 app.get('/api/articles', function (req, res) {
@@ -116,11 +135,15 @@ app.use(function (req, res, next) {
 });
 
 app.use(function (err, req, res, next) {
-  if (err.code === 'EBADCSRFTOKEN') {
-    res.status(403);
-    res.send('form tampered with');
-    return;
+  if (err.code !== 'EBADCSRFTOKEN') {
+    return next(err);
   }
+  log.error('Form tampered with(%d): %s', res.statusCode, err.message);
+  res.status(403);
+  res.send('form tampered with');
+});
+
+app.use(function (err, req, res, next) {
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
   res.send({ error: err.message });
