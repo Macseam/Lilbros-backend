@@ -1,5 +1,6 @@
 let config = require('./config');
 let mongoose = require('mongoose');
+mongoose.Promise = require('bluebird');
 let log = require('./log')(module);
 
 mongoose.connect(config.get('mongoose:uri'));
