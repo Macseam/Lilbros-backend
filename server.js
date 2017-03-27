@@ -30,11 +30,6 @@ if (app.get('env') !== 'development') {
   sess.cookie.secure = true;
 }
 
-let corsOptions = {
-  origin: 'http://example.com',
-  optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
-};
-
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -49,7 +44,7 @@ app.use(function(req, res, next) {
   next();
 });
 
-app.get('/api', cors(corsOptions), function (req, res) {
+app.get('/api', function (req, res) {
   res.send('API is running');
 });
 
