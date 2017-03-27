@@ -11,7 +11,7 @@ let session = require('express-session');
 let app = express();
 
 let corsOptions = {
-  origin: true,
+  origin: 'http://macseam.ru',
   optionsSuccessStatus: 200
 };
 
