@@ -10,6 +10,17 @@ let ArticleModel = require('./libs/mongoose').ArticleModel;
 let session = require('express-session');
 let app = express();
 
+let whitelist = ['http://localhost'];
+let corsOptions = {
+  origin: function (origin, callback) {
+    if (whitelist.indexOf(origin) !== -1) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  }
+};
+
 app.set('view engine', 'ejs');
 
 let parseJson = bodyParser.json();
@@ -36,6 +47,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session(sess));
 app.use(cookieParser());
 app.use(csrfProtection);
+
+app.use(cors(corsOptions));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
