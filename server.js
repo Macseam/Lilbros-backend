@@ -11,7 +11,7 @@ let session = require('express-session');
 let app = express();
 
 let corsOptions = {
-  origin: 'http://localhost',
+  origin: 'http://localhost:9001',
   optionsSuccessStatus: 200
 };
 
