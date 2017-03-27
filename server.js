@@ -10,15 +10,9 @@ let ArticleModel = require('./libs/mongoose').ArticleModel;
 let session = require('express-session');
 let app = express();
 
-let whitelist = ['http://146.185.138.125'];
 let corsOptions = {
-  origin: function (origin, callback) {
-    if (whitelist.indexOf(origin) !== -1) {
-      callback(null, true)
-    } else {
-      callback(new Error('Not allowed by CORS'))
-    }
-  }
+  origin: 'http://localhost',
+  optionsSuccessStatus: 200
 };
 
 app.set('view engine', 'ejs');
