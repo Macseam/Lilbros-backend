@@ -1,3 +1,5 @@
+/* =========== Importing modules */
+
 let csrf = require('csurf');
 let bodyParser = require('body-parser');
 let config = require('./libs/config');
@@ -9,6 +11,8 @@ let log = require('./libs/log')(module);
 let ArticleModel = require('./libs/mongoose').ArticleModel;
 let session = require('express-session');
 let app = express();
+
+/* =========== Setting up middleware options */
 
 let corsOptions = {
   origin: 'http://macseam.ru',
@@ -35,6 +39,8 @@ if (app.get('env') !== 'development') {
   sess.cookie.secure = true;
 }
 
+/* =========== Including middleware */
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -51,14 +57,16 @@ app.use(function(req, res, next) {
   next();
 });
 
+/* =========== Setting up routing */
+
 app.get('/api', function (req, res) {
   res.send('API is running');
 });
 
 app.get('/form', csrfProtection, function(req, res) {
-  // pass the csrfToken to the view
-  let tkn = req.csrfToken();
-  res.render('index', { csrfToken: tkn })
+  /*let tkn = req.csrfToken();
+  res.render('index', { csrfToken: tkn })*/
+  res.send(req.csrfToken());
 });
 
 app.post('/process', parseBody, csrfProtection, function(req, res){
@@ -135,11 +143,12 @@ app.get('/ErrorExample', function (req, res, next) {
   next(new Error('Random error!'));
 });
 
+/* =========== Error handling */
+
 app.use(function (req, res, next) {
   res.status(404);
   log.debug('Not found URL: %s', req.url);
   res.send({ error: 'Not found' });
-  return;
 });
 
 app.use(function (err, req, res, next) {
@@ -155,8 +164,9 @@ app.use(function (err, req, res, next) {
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
   res.send({ error: err.message });
-  return;
 });
+
+/* =========== Listening for incoming connections */
 
 app.listen(config.get('port'), function () {
   log.info('Express server listening on port ' + config.get('port'));
