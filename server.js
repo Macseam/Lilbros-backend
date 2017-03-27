@@ -2,6 +2,7 @@ let csrf = require('csurf');
 let bodyParser = require('body-parser');
 let config = require('./libs/config');
 let express = require('express');
+let cors = require('cors');
 let path = require('path');
 let cookieParser = require('cookie-parser');
 let log = require('./libs/log')(module);
@@ -29,6 +30,13 @@ if (app.get('env') !== 'development') {
   sess.cookie.secure = true;
 }
 
+let corsOptions = {
+  credentials: true,
+  origin: true,
+};
+
+app.use(cors(corsOptions));
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -43,7 +51,7 @@ app.use(function(req, res, next) {
   next();
 });
 
-app.get('/api', function (req, res) {
+app.get('/api', cors(), function (req, res) {
   res.send('API is running');
 });
 
