@@ -13,6 +13,7 @@ let app = express();
 let whitelist = ['http://localhost'];
 let corsOptions = {
   origin: function (origin, callback) {
+    console.log(origin);
     if (whitelist.indexOf(origin) !== -1) {
       callback(null, true)
     } else {
