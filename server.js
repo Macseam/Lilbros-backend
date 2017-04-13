@@ -22,10 +22,10 @@ let corsOptions = {
 app.set('view engine', 'ejs');
 
 let parseJson = bodyParser.json();
-let parseUrlencoded = bodyParser.urlencoded({ extended: true });
+let parseUrlencoded = bodyParser.urlencoded({extended: true});
 let parseBody = [parseJson, parseUrlencoded];
 
-let csrfProtection = csrf({ cookie: true });
+let csrfProtection = csrf({cookie: true});
 
 let sess = {
   secret: 'keyboard cat',
@@ -42,7 +42,7 @@ if (app.get('env') !== 'development') {
 /* =========== Including middleware */
 
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({extended: true}));
 
 app.use(session(sess));
 app.use(cookieParser());
@@ -52,7 +52,7 @@ app.use(cors(corsOptions));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
   res.locals._csrf = req.csrfToken();
   next();
 });
@@ -63,13 +63,13 @@ app.get('/api', function (req, res) {
   res.send('API is running');
 });
 
-app.get('/form', csrfProtection, function(req, res) {
+app.get('/form', csrfProtection, function (req, res) {
   /*let tkn = req.csrfToken();
-  res.render('index', { csrfToken: tkn })*/
+   res.render('index', { csrfToken: tkn })*/
   res.send(req.csrfToken());
 });
 
-app.post('/process', parseBody, csrfProtection, function(req, res){
+app.post('/process', parseBody, csrfProtection, function (req, res) {
   res.send('<p>Your favorite color is "' + req.body.favoriteColor + '".');
 });
 
@@ -81,7 +81,7 @@ app.get('/api/articles', function (req, res) {
     else {
       res.statusCode = 500;
       log.error('Internal error(%d): %s', res.statusCode, err.message);
-      return res.send({ error: 'Server error' });
+      return res.send({error: 'Server error'});
     }
   });
 });
@@ -96,24 +96,24 @@ app.post('/api/articles', function (req, res) {
   article.save(function (err) {
     if (!err) {
       log.info('article created');
-      return res.send({ status: 'OK', article: article });
+      return res.send({status: 'OK', article: article});
     }
     else {
       console.log(err);
       if (err.name == 'ValidationError') {
         res.statusCode = 400;
-        res.send({ error: 'Validation error' });
+        res.send({error: 'Validation error'});
       }
       else {
         res.statusCode = 500;
-        res.send({ error: 'Server error' });
+        res.send({error: 'Server error'});
       }
       log.error('Internal error(%d): %s', res.statusCode, err.message);
     }
   });
 });
 
-app.get('/sesstest', function(req, res) {
+app.get('/sesstest', function (req, res) {
   let resSess = req.session;
   if (resSess.views) {
     resSess.views++;
@@ -148,7 +148,7 @@ app.get('/ErrorExample', function (req, res, next) {
 app.use(function (req, res, next) {
   res.status(404);
   log.debug('Not found URL: %s', req.url);
-  res.send({ error: 'Not found' });
+  res.send({error: 'Not found'});
 });
 
 app.use(function (err, req, res, next) {
@@ -163,7 +163,7 @@ app.use(function (err, req, res, next) {
 app.use(function (err, req, res, next) {
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
-  res.send({ error: err.message });
+  res.send({error: err.message});
 });
 
 /* =========== Listening for incoming connections */
