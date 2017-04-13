@@ -88,10 +88,10 @@ app.get('/api/articles', function (req, res) {
 
 app.post('/api/articles', function (req, res) {
   let article = new ArticleModel({
-    title: req.body.title,
-    author: req.body.author,
-    description: req.body.description,
-    images: req.body.images
+    title: req.body.title || null,
+    author: req.body.author || null,
+    description: req.body.description || null,
+    images: req.body.images || []
   });
   article.save(function (err) {
     if (!err) {
