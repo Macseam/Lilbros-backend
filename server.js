@@ -100,7 +100,7 @@ app.post('/api/articles', function (req, res) {
     }
     else {
       console.log(err);
-      if (err.name == 'ValidationError') {
+      if (err.name === 'ValidationError') {
         res.statusCode = 400;
         res.send({error: 'Validation error'});
       }
