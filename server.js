@@ -161,6 +161,22 @@ app.get('/api/articles/:id', function (req, res) {
   });
 });
 
+app.get('/api/details/:id', function (req, res) {
+  return ArticleModel.findById(req.params.id, function (err, article) {
+    if(!article) {
+      res.statusCode = 404;
+      return res.send({ error: 'Not found' });
+    }
+    if (!err) {
+      return res.send(article);
+    } else {
+      res.statusCode = 500;
+      log.error('Internal error(%d): %s',res.statusCode,err.message);
+      return res.send({ error: 'Server error' });
+    }
+  });
+});
+
 app.put('/api/articles/:id', function (req, res) {
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
