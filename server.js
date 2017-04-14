@@ -15,7 +15,7 @@ let app = express();
 /* =========== Setting up middleware options */
 
 let corsOptions = {
-  origin: 'http://95.30.20.3',
+  origin: 'http://localhost:8000',
   optionsSuccessStatus: 200
 };
 
