@@ -27,7 +27,7 @@ let parseBody = [parseJson, parseUrlencoded];
 
 let csrfProtection = csrf({
   cookie: true,
-  ignoreMethods: []
+  ignoreMethods: ['GET','POST','DELETE']
 });
 
 let sess = {
