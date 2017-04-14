@@ -94,7 +94,7 @@ app.post('/api/articles', function (req, res) {
     title: req.body.title || null,
     author: req.body.author || null,
     parent: req.body.parent || null,
-    slug: req.body.parent || null,
+    slug: req.body.slug || null,
     description: req.body.description || null,
     images: req.body.images || []
   });
