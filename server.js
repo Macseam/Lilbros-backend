@@ -139,7 +139,7 @@ app.get('/api/articles/:id', function (req, res) {
       return res.send({ error: 'Not found' });
     }
     if (!err) {
-      return ArticleModel.findById(article._id, function (childErr, childArticle) {
+      return ArticleModel.find({"parent": article._id}, function (childErr, childArticle) {
         if(!childArticle) {
           res.statusCode = 404;
           return res.send({ error: 'Not found' });
