@@ -139,7 +139,7 @@ app.get('/api/articles/:id', function (req, res) {
       return res.send({ error: 'Not found' });
     }
     if (!err) {
-      return res.send({ ...article });
+      return res.send(article);
     } else {
       res.statusCode = 500;
       log.error('Internal error(%d): %s',res.statusCode,err.message);
