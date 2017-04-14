@@ -133,7 +133,7 @@ app.get('/sesstest', function (req, res) {
 });
 
 app.get('/api/articles/:id', function (req, res) {
-  return ArticleModel.findById(req.params.id, function (err, article) {
+  return ArticleModel.find({"slug": req.params.id}, function (err, article) {
     if(!article) {
       res.statusCode = 404;
       return res.send({ error: 'Not found' });
