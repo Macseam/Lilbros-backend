@@ -93,6 +93,7 @@ app.post('/api/articles', function (req, res) {
   let article = new ArticleModel({
     title: req.body.title || null,
     author: req.body.author || null,
+    parent: req.body.parent || null,
     description: req.body.description || null,
     images: req.body.images || []
   });
@@ -156,6 +157,7 @@ app.put('/api/articles/:id', function (req, res) {
     article.title = req.body.title;
     article.description = req.body.description;
     article.author = req.body.author;
+    article.parent = req.body.parent;
     article.images = req.body.images;
     return article.save(function (err) {
       if (!err) {
