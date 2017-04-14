@@ -25,7 +25,10 @@ let parseJson = bodyParser.json();
 let parseUrlencoded = bodyParser.urlencoded({extended: true});
 let parseBody = [parseJson, parseUrlencoded];
 
-let csrfProtection = csrf({cookie: true});
+let csrfProtection = csrf({
+  cookie: true,
+  ignoreMethods: []
+});
 
 let sess = {
   secret: 'keyboard cat',
