@@ -45,6 +45,10 @@ let Article = new Schema({
     type: Number,
     required: false
   },
+  slug: {
+    type: String,
+    required: true
+  },
   images: [Images],
   modified: {
     type: Date,

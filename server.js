@@ -27,7 +27,7 @@ let parseBody = [parseJson, parseUrlencoded];
 
 let csrfProtection = csrf({
   cookie: true,
-  ignoreMethods: ['GET','POST','DELETE']
+  ignoreMethods: ['GET','POST','PUT','DELETE']
 });
 
 let sess = {
@@ -94,6 +94,7 @@ app.post('/api/articles', function (req, res) {
     title: req.body.title || null,
     author: req.body.author || null,
     parent: req.body.parent || null,
+    slug: req.body.parent || null,
     description: req.body.description || null,
     images: req.body.images || []
   });
@@ -158,6 +159,7 @@ app.put('/api/articles/:id', function (req, res) {
     article.description = req.body.description;
     article.author = req.body.author;
     article.parent = req.body.parent;
+    article.slug = req.body.slug;
     article.images = req.body.images;
     return article.save(function (err) {
       if (!err) {
