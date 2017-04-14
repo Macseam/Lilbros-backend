@@ -162,7 +162,7 @@ app.get('/api/articles/:id', function (req, res) {
 });
 
 app.get('/api/details/:id', function (req, res) {
-  return ArticleModel.find({"slug": req.params.id}, function (err, article) {
+  return ArticleModel.findOne({"slug": req.params.id}, function (err, article) {
     if(!article) {
       res.statusCode = 404;
       return res.send({ error: 'Not found' });
