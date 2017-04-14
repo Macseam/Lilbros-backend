@@ -139,7 +139,20 @@ app.get('/api/articles/:id', function (req, res) {
       return res.send({ error: 'Not found' });
     }
     if (!err) {
-      return res.send(article);
+      return ArticleModel.findById(article._id, function (childErr, childArticle) {
+        if(!childArticle) {
+          res.statusCode = 404;
+          return res.send({ error: 'Not found' });
+        }
+        if (!childErr) {
+          return res.send(childArticle);
+        }
+        else {
+          res.statusCode = 500;
+          log.error('Internal error(%d): %s',res.statusCode,childErr.message);
+          return res.send({ error: 'Server error' });
+        }
+      })
     } else {
       res.statusCode = 500;
       log.error('Internal error(%d): %s',res.statusCode,err.message);
