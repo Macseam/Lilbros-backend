@@ -41,6 +41,10 @@ let Article = new Schema({
     type: String,
     required: true
   },
+  parent: {
+    type: Number,
+    required: false
+  },
   images: [Images],
   modified: {
     type: Date,
@@ -49,7 +53,7 @@ let Article = new Schema({
 });
 
 Article.path('title').validate(function (v) {
-  return v.length > 5 && v.length < 70;
+  return v.length > 3 && v.length < 70;
 });
 
 let ArticleModel = mongoose.model('Article', Article);
