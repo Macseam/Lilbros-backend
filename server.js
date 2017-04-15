@@ -15,7 +15,7 @@ let app = express();
 /* =========== Setting up middleware options */
 
 let corsOptions = {
-  origin: 'http://macseam.ru:8080',
+  origin: 'http://macseam.ru',
   optionsSuccessStatus: 200
 };
 
@@ -51,7 +51,7 @@ app.use(bodyParser.urlencoded({extended: true}));
 app.use(cookieParser());
 app.use(csrfProtection);
 
-//app.use(cors(corsOptions));
+app.use(cors(corsOptions));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
