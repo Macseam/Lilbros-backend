@@ -9,13 +9,13 @@ let path = require('path');
 let cookieParser = require('cookie-parser');
 let log = require('./libs/log')(module);
 let ArticleModel = require('./libs/mongoose').ArticleModel;
-let session = require('express-session');
+//let session = require('express-session');
 let app = express();
 
 /* =========== Setting up middleware options */
 
 let corsOptions = {
-  origin: 'http://localhost:8080',
+  origin: 'http://macseam.ru',
   optionsSuccessStatus: 200
 };
 
@@ -30,12 +30,12 @@ let csrfProtection = csrf({
   ignoreMethods: ['GET','POST','PUT','DELETE']
 });
 
-let sess = {
+/*let sess = {
   secret: 'keyboard cat',
   cookie: {},
   resave: true,
   saveUninitialized: true
-};
+};*/
 
 if (app.get('env') !== 'development') {
   app.set('trust proxy', 1);
@@ -47,7 +47,7 @@ if (app.get('env') !== 'development') {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
-app.use(session(sess));
+//app.use(session(sess));
 app.use(cookieParser());
 app.use(csrfProtection);
 
@@ -118,19 +118,16 @@ app.post('/api/articles', function (req, res) {
   });
 });
 
-app.get('/sesstest', function (req, res) {
+/*app.get('/sesstest', function (req, res) {
   let resSess = req.session;
   if (resSess.views) {
     resSess.views++;
-    res.setHeader('Content-Type', 'text/html');
-    res.write('<p>views: ' + resSess.views + '</p>');
-    res.write('<p>expires in: ' + (resSess.cookie.maxAge / 1000) + 's</p>');
-    res.end();
+    res.send('views: ' + resSess.views + ', ' + 'expires in: ' + (resSess.cookie.maxAge / 1000) + 's');
   } else {
     resSess.views = 1;
-    res.end('welcome to the session demo. refresh!');
+    res.send('welcome to the session demo. refresh!');
   }
-});
+});*/
 
 app.get('/api/articles/:id', function (req, res) {
   return ArticleModel.find({"slug": req.params.id}, function (err, article) {
