@@ -15,7 +15,7 @@ let app = express();
 /* =========== Setting up middleware options */
 
 let corsOptions = {
-  origin: 'http://macseam.ru',
+  origin: 'http://macseam.ru:8080',
   optionsSuccessStatus: 200
 };
 
