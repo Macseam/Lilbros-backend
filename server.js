@@ -51,7 +51,7 @@ app.use(bodyParser.urlencoded({extended: true}));
 app.use(cookieParser());
 app.use(csrfProtection);
 
-//app.use(cors(corsOptions));
+app.use(cors(corsOptions));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -76,7 +76,7 @@ app.post('/process', parseBody, csrfProtection, function (req, res) {
   res.send('<p>Your favorite color is "' + req.body.favoriteColor + '".');
 });
 
-app.get('/api/articles', cors(corsOptions), function (req, res) {
+app.get('/api/articles', function (req, res) {
   return ArticleModel.find(function (err, articles) {
     if (!err) {
       return res.send(articles);
