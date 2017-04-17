@@ -9,13 +9,15 @@ let path = require('path');
 let cookieParser = require('cookie-parser');
 let log = require('./libs/log')(module);
 let ArticleModel = require('./libs/mongoose').ArticleModel;
-//let session = require('express-session');
+let mongooseConnection = require('./libs/mongoose').db;
+let session = require('express-session');
+const MongoStore = require('connect-mongo')(session);
 let app = express();
 
 /* =========== Setting up middleware options */
 
 let corsOptions = {
-  origin: 'http://macseam.ru',
+  origin: 'http://localhost:8090',
   optionsSuccessStatus: 200
 };
 
@@ -30,12 +32,13 @@ let csrfProtection = csrf({
   ignoreMethods: ['GET','POST','PUT','DELETE']
 });
 
-/*let sess = {
+let sess = {
   secret: 'keyboard cat',
   cookie: {},
   resave: true,
-  saveUninitialized: true
-};*/
+  saveUninitialized: true,
+  store: new MongoStore({mongooseConnection})
+};
 
 if (app.get('env') !== 'development') {
   app.set('trust proxy', 1);
@@ -47,7 +50,7 @@ if (app.get('env') !== 'development') {
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
-//app.use(session(sess));
+app.use(session(sess));
 app.use(cookieParser());
 app.use(csrfProtection);
 
@@ -59,6 +62,23 @@ app.use(function (req, res, next) {
   res.locals._csrf = req.csrfToken();
   next();
 });
+
+/* =========== Setting up middleware */
+
+function checkUser(req, res, next) {
+  if (req.session.user_id) {
+    User.findById(req.session.user_id, function(user) {
+      if (user) {
+        req.currentUser = user;
+        next();
+      } else {
+        res.redirect('/login');
+      }
+    });
+  } else {
+    res.redirect('/login');
+  }
+}
 
 /* =========== Setting up routing */
 
@@ -118,7 +138,7 @@ app.post('/api/articles', function (req, res) {
   });
 });
 
-/*app.get('/sesstest', function (req, res) {
+app.get('/sesstest', function (req, res) {
   let resSess = req.session;
   if (resSess.views) {
     resSess.views++;
@@ -127,7 +147,7 @@ app.post('/api/articles', function (req, res) {
     resSess.views = 1;
     res.send('welcome to the session demo. refresh!');
   }
-});*/
+});
 
 app.get('/api/articles/:id', function (req, res) {
   return ArticleModel.find({"slug": req.params.id}, function (err, article) {

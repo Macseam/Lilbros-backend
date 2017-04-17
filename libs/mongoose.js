@@ -63,3 +63,4 @@ Article.path('title').validate(function (v) {
 let ArticleModel = mongoose.model('Article', Article);
 
 module.exports.ArticleModel = ArticleModel;
+module.exports.db = db;
