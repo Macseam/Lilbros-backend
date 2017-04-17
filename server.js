@@ -8,6 +8,7 @@ let cors = require('cors');
 let path = require('path');
 let cookieParser = require('cookie-parser');
 let log = require('./libs/log')(module);
+let UserModel = require('./libs/mongoose').UserModel;
 let ArticleModel = require('./libs/mongoose').ArticleModel;
 let mongooseConnection = require('./libs/mongoose').db;
 let session = require('express-session');
@@ -18,25 +19,23 @@ let app = express();
 
 let corsOptions = {
   origin: 'http://localhost:8090',
+  methods: ['OPTIONS','HEAD','GET'],
   optionsSuccessStatus: 200
 };
-
-app.set('view engine', 'ejs');
 
 let parseJson = bodyParser.json();
 let parseUrlencoded = bodyParser.urlencoded({extended: true});
 let parseBody = [parseJson, parseUrlencoded];
 
+
 let csrfProtection = csrf({
-  cookie: true,
-  ignoreMethods: ['GET','POST','PUT','DELETE']
+  cookie: true
 });
 
 let sess = {
   secret: 'keyboard cat',
-  cookie: {},
-  resave: true,
-  saveUninitialized: true,
+  resave: false,
+  saveUninitialized: false,
   store: new MongoStore({mongooseConnection})
 };
 
@@ -60,6 +59,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(function (req, res, next) {
   res.locals._csrf = req.csrfToken();
+  console.log(res.locals._csrf);
   next();
 });
 
@@ -82,18 +82,94 @@ function checkUser(req, res, next) {
 
 /* =========== Setting up routing */
 
+app.get('/api/getuserslist', function (req, res) {
+  return UserModel.find(function (err, users) {
+    if (!err) {
+      return res.send(users);
+    }
+    else {
+      res.statusCode = 500;
+      log.error('Internal error(%d): %s', res.statusCode, err.message);
+      return res.send({error: 'Server error'});
+    }
+  });
+});
+
+app.post('/api/setnewuser', function (req, res) {
+  return UserModel.find(function (err, userAccount) {
+    if (!err && userAccount && userAccount.length === 0) {
+      let useracc = new UserModel({
+        username: req.body.username || null,
+        email: req.body.email || null,
+        password: req.body.password || null,
+      });
+      useracc.save(function (err) {
+        if (!err) {
+          log.info('user created');
+          return res.send({status: 'OK', useracc: useracc});
+        }
+        else {
+          console.log(err);
+          if (err.name === 'ValidationError') {
+            res.statusCode = 400;
+            res.send({error: 'Validation error'});
+          }
+          else {
+            res.statusCode = 500;
+            res.send({error: 'Server error'});
+          }
+          log.error('Internal error(%d): %s', res.statusCode, err.message);
+        }
+      });
+    }
+    else if (!err && userAccount && userAccount.length > 0) {
+      res.statusCode = 500;
+      res.send({error: 'Server error'});
+    }
+    else {
+      console.log(err);
+      if (err.name === 'ValidationError') {
+        res.statusCode = 400;
+        res.send({error: 'Validation error'});
+      }
+      else {
+        res.statusCode = 500;
+        res.send({error: 'Server error'});
+      }
+      log.error('Internal error(%d): %s', res.statusCode, err.message);
+    }
+  });
+});
+
+app.delete('/api/deleteuser/:id', function (req, res) {
+  return UserModel.findById(req.params.id, function (err, useracc) {
+    if(!useracc) {
+      res.statusCode = 404;
+      return res.send({ error: 'Not found' });
+    }
+    return useracc.remove(function (err) {
+      if (!err) {
+        log.info("article removed");
+        return res.send({ status: 'OK' });
+      } else {
+        res.statusCode = 500;
+        log.error('Internal error(%d): %s',res.statusCode,err.message);
+        return res.send({ error: 'Server error' });
+      }
+    });
+  });
+});
+
+app.post('/api/sendauthinfo', parseBody, function (req, res) {
+  res.send('<p>You are "' + req.body.username + '".');
+});
+
 app.get('/api', function (req, res) {
   res.send('API is running');
 });
 
-app.get('/form', csrfProtection, function (req, res) {
-  /*let tkn = req.csrfToken();
-   res.render('index', { csrfToken: tkn })*/
-  res.send(req.csrfToken());
-});
-
-app.post('/process', parseBody, csrfProtection, function (req, res) {
-  res.send('<p>Your favorite color is "' + req.body.favoriteColor + '".');
+app.get('/form', function (req, res) {
+  res.send(res.locals._csrf);
 });
 
 app.get('/api/articles', function (req, res) {
@@ -260,6 +336,7 @@ app.use(function (err, req, res, next) {
   if (err.code !== 'EBADCSRFTOKEN') {
     return next(err);
   }
+  console.log(res.locals._csrf);
   log.error('Form tampered with(%d): %s', res.statusCode, err.message);
   res.status(403);
   res.send('form tampered with');
