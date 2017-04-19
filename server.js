@@ -46,7 +46,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use(session(sess));
-app.use(csrfProtection);
+//app.use(csrfProtection);
 
 let router = express.Router();
 app.use(router);
@@ -54,33 +54,37 @@ app.use(router);
 //app.use(express.static(path.join(__dirname, 'public')));
 
 function checkUser(req, res, next) {
+  console.log(req.session.user_id);
   if (req.session.user_id) {
-    User.findById(req.session.user_id, function(user) {
-      if (user) {
-        req.currentUser = user;
+    UserModel.findById(req.session.user_id, function(err, useracc) {
+      if (useracc) {
+        console.log(useracc.username + ' is logged in');
+        req.currentUser = useracc;
         next();
       } else {
-        res.redirect('/login');
+        console.log('no matched user');
+        res.send('redirect to login');
       }
     });
   } else {
-    res.redirect('/login');
+    console.log('no user_id');
+    res.send('redirect to login');
   }
 }
 
 /* =========== Setting up routing */
 
-router.get('/api', function (req, res) {
+router.get('/api', checkUser, function (req, res) {
   res.send('API is running');
 });
 
-router.get('/form', function (req, res) {
+/*router.get('/form', function (req, res) {
   res.send(req.csrfToken());
-});
+});*/
 
-router.get('/testform', function(req, res) {
+/*router.get('/testform', function(req, res) {
   res.render('index', { csrfToken: req.csrfToken() })
-});
+});*/
 
 router.post('/testprocess', parseBody, function(req, res){
   res.send('<p>Your favorite color is "' + req.body.favoriteColor + '".');
@@ -165,6 +169,7 @@ router.delete('/api/deleteuser/:id', function (req, res) {
 });
 
 router.post('/api/sendauthinfo', parseBody, function (req, res) {
+  let sess = req.session;
   return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
     if(!useracc) {
       res.statusCode = 404;
@@ -173,7 +178,9 @@ router.post('/api/sendauthinfo', parseBody, function (req, res) {
     useracc.comparePassword(req.body.password, function(err, isMatch) {
       if (err) throw err;
       if (isMatch) {
-        return res.send(req.csrfToken());
+        sess.user_id = useracc._id;
+        console.log(sess);
+        return res.send(useracc._id);
       }
       else {
         return res.send('password doesnt match');
