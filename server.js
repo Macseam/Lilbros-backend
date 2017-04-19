@@ -1,69 +1,57 @@
 /* =========== Importing modules */
 
-let csrf = require('csurf');
-let bodyParser = require('body-parser');
 let config = require('./libs/config');
+let path = require('path');
+let log = require('./libs/log')(module);
 let express = require('express');
 let cors = require('cors');
-let path = require('path');
-let cookieParser = require('cookie-parser');
-let log = require('./libs/log')(module);
+let session = require('express-session');
+let bodyParser = require('body-parser');
+let csrf = require('csurf');
 let UserModel = require('./libs/mongoose').UserModel;
 let ArticleModel = require('./libs/mongoose').ArticleModel;
 let mongooseConnection = require('./libs/mongoose').db;
-let session = require('express-session');
 const MongoStore = require('connect-mongo')(session);
+
 let app = express();
+app.set('view engine', 'ejs');
 
 /* =========== Setting up middleware options */
 
 let corsOptions = {
   origin: 'http://localhost:8090',
-  methods: ['OPTIONS','HEAD','GET'],
-  optionsSuccessStatus: 200
+  //methods: ['OPTIONS','HEAD','GET','POST'],
+  optionsSuccessStatus: 200,
+  credentials: true
 };
 
 let parseJson = bodyParser.json();
-let parseUrlencoded = bodyParser.urlencoded({extended: true});
+let parseUrlencoded = bodyParser.urlencoded({ extended: true });
 let parseBody = [parseJson, parseUrlencoded];
 
-
-let csrfProtection = csrf({
-  cookie: true
-});
+let csrfProtection = csrf({ cookie: false });
 
 let sess = {
   secret: 'keyboard cat',
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
   store: new MongoStore({mongooseConnection})
 };
 
-if (app.get('env') !== 'development') {
-  app.set('trust proxy', 1);
-  sess.cookie.secure = true;
-}
-
 /* =========== Including middleware */
-
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: true}));
-
-app.use(session(sess));
-app.use(cookieParser());
-app.use(csrfProtection);
 
 app.use(cors(corsOptions));
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-app.use(function (req, res, next) {
-  res.locals._csrf = req.csrfToken();
-  console.log(res.locals._csrf);
-  next();
-});
+app.use(session(sess));
+app.use(csrfProtection);
 
-/* =========== Setting up middleware */
+let router = express.Router();
+app.use(router);
+
+//app.use(express.static(path.join(__dirname, 'public')));
 
 function checkUser(req, res, next) {
   if (req.session.user_id) {
@@ -82,7 +70,23 @@ function checkUser(req, res, next) {
 
 /* =========== Setting up routing */
 
-app.get('/api/getuserslist', function (req, res) {
+router.get('/api', function (req, res) {
+  res.send('API is running');
+});
+
+router.get('/form', function (req, res) {
+  res.send(req.csrfToken());
+});
+
+router.get('/testform', function(req, res) {
+  res.render('index', { csrfToken: req.csrfToken() })
+});
+
+router.post('/testprocess', parseBody, function(req, res){
+  res.send('<p>Your favorite color is "' + req.body.favoriteColor + '".');
+});
+
+router.get('/api/getuserslist', function (req, res) {
   return UserModel.find(function (err, users) {
     if (!err) {
       return res.send(users);
@@ -95,7 +99,7 @@ app.get('/api/getuserslist', function (req, res) {
   });
 });
 
-app.post('/api/setnewuser', function (req, res) {
+router.post('/api/setnewuser', function (req, res) {
   return UserModel.find(function (err, userAccount) {
     if (!err && userAccount && userAccount.length === 0) {
       let useracc = new UserModel({
@@ -141,7 +145,7 @@ app.post('/api/setnewuser', function (req, res) {
   });
 });
 
-app.delete('/api/deleteuser/:id', function (req, res) {
+router.delete('/api/deleteuser/:id', function (req, res) {
   return UserModel.findById(req.params.id, function (err, useracc) {
     if(!useracc) {
       res.statusCode = 404;
@@ -160,19 +164,25 @@ app.delete('/api/deleteuser/:id', function (req, res) {
   });
 });
 
-app.post('/api/sendauthinfo', parseBody, function (req, res) {
-  res.send('<p>You are "' + req.body.username + '".');
+router.post('/api/sendauthinfo', parseBody, function (req, res) {
+  return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
+    if(!useracc) {
+      res.statusCode = 404;
+      return res.send({ error: 'User not found' });
+    }
+    useracc.comparePassword(req.body.password, function(err, isMatch) {
+      if (err) throw err;
+      if (isMatch) {
+        return res.send(req.csrfToken());
+      }
+      else {
+        return res.send('password doesnt match');
+      }
+    });
+  });
 });
 
-app.get('/api', function (req, res) {
-  res.send('API is running');
-});
-
-app.get('/form', function (req, res) {
-  res.send(res.locals._csrf);
-});
-
-app.get('/api/articles', function (req, res) {
+router.get('/api/articles', function (req, res) {
   return ArticleModel.find(function (err, articles) {
     if (!err) {
       return res.send(articles);
@@ -185,7 +195,7 @@ app.get('/api/articles', function (req, res) {
   });
 });
 
-app.post('/api/articles', function (req, res) {
+router.post('/api/articles', function (req, res) {
   let article = new ArticleModel({
     title: req.body.title || null,
     author: req.body.author || null,
@@ -214,7 +224,7 @@ app.post('/api/articles', function (req, res) {
   });
 });
 
-app.get('/sesstest', function (req, res) {
+router.get('/sesstest', function (req, res) {
   let resSess = req.session;
   if (resSess.views) {
     resSess.views++;
@@ -225,7 +235,7 @@ app.get('/sesstest', function (req, res) {
   }
 });
 
-app.get('/api/articles/:id', function (req, res) {
+router.get('/api/articles/:id', function (req, res) {
   return ArticleModel.find({"slug": req.params.id}, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -254,7 +264,7 @@ app.get('/api/articles/:id', function (req, res) {
   });
 });
 
-app.get('/api/details/:id', function (req, res) {
+router.get('/api/details/:id', function (req, res) {
   return ArticleModel.findOne({"slug": req.params.id}, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -270,7 +280,7 @@ app.get('/api/details/:id', function (req, res) {
   });
 });
 
-app.put('/api/articles/:id', function (req, res) {
+router.put('/api/articles/:id', function (req, res) {
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -301,7 +311,7 @@ app.put('/api/articles/:id', function (req, res) {
   });
 });
 
-app.delete('/api/articles/:id', function (req, res) {
+router.delete('/api/articles/:id', function (req, res) {
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -320,7 +330,7 @@ app.delete('/api/articles/:id', function (req, res) {
   });
 });
 
-app.get('/ErrorExample', function (req, res, next) {
+router.get('/ErrorExample', function (req, res, next) {
   next(new Error('Random error!'));
 });
 
@@ -336,7 +346,6 @@ app.use(function (err, req, res, next) {
   if (err.code !== 'EBADCSRFTOKEN') {
     return next(err);
   }
-  console.log(res.locals._csrf);
   log.error('Form tampered with(%d): %s', res.statusCode, err.message);
   res.status(403);
   res.send('form tampered with');
