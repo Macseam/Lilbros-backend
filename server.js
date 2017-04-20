@@ -74,7 +74,7 @@ function checkUser(req, res, next) {
 router.get('/api', checkUser, function (req, res) {
   let sess = req.session;
   let saltValue = bcrypt.genSaltSync(SALT_WORK_FACTOR);
-  let tokenValue = saltValue + ":" + bcrypt.hashSync((saltValue + ":" + req.session.secretkey), saltValue);
+  let tokenValue = bcrypt.hashSync((saltValue + ":" + req.session.secretkey), saltValue);
   console.log('salt generated: ' + saltValue);
   console.log('token saved: ' + tokenValue);
   sess.token = tokenValue;
@@ -84,8 +84,9 @@ router.get('/api', checkUser, function (req, res) {
 
 router.get('/apitherapy', checkUser, function (req, res) {
   let sess = req.session;
-  let saltValue = sess.token.split(':')[0];
-  let tokenValue = saltValue + ":" + bcrypt.hashSync((saltValue + ":" + sess.secretkey), saltValue);
+  let saltValue = sess.token.substr(0,29);
+  console.log('salt calculated: ' + saltValue);
+  let tokenValue = bcrypt.hashSync((saltValue + ":" + sess.secretkey), saltValue);
   console.log('token generated: ' + tokenValue);
   console.log('hashes match: ' + (sess.token === tokenValue));
   res.send('APITherapy is running');
