@@ -6,7 +6,6 @@ bcrypt = require('bcrypt'),
 SALT_WORK_FACTOR = 10;
 
 mongoose.Promise = require('bluebird');
-let crypto = require('crypto');
 let log = require('./log')(module);
 
 mongoose.connect(config.get('mongoose:uri'));
@@ -21,12 +20,6 @@ db.on('error', function (err) {
 db.once('open', function callback() {
   log.info('Connected to DB!');
 });
-
-let encryptPassword = (password, salt) => {
-  let hash = crypto.createHmac('sha512', salt);
-  hash.update(password);
-  return hash.digest('hex');
-};
 
 let Images = new Schema({
   kind: {

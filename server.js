@@ -5,16 +5,16 @@ let path = require('path');
 let log = require('./libs/log')(module);
 let express = require('express');
 let cors = require('cors');
+let bcrypt = require('bcrypt');
+let SALT_WORK_FACTOR = 10;
 let session = require('express-session');
 let bodyParser = require('body-parser');
-let csrf = require('csurf');
 let UserModel = require('./libs/mongoose').UserModel;
 let ArticleModel = require('./libs/mongoose').ArticleModel;
 let mongooseConnection = require('./libs/mongoose').db;
 const MongoStore = require('connect-mongo')(session);
 
 let app = express();
-app.set('view engine', 'ejs');
 
 /* =========== Setting up middleware options */
 
@@ -28,8 +28,6 @@ let corsOptions = {
 let parseJson = bodyParser.json();
 let parseUrlencoded = bodyParser.urlencoded({ extended: true });
 let parseBody = [parseJson, parseUrlencoded];
-
-let csrfProtection = csrf({ cookie: false });
 
 let sess = {
   secret: 'keyboard cat',
@@ -46,19 +44,18 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use(session(sess));
-//app.use(csrfProtection);
 
 let router = express.Router();
 app.use(router);
 
-//app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public')));
 
 function checkUser(req, res, next) {
-  console.log(req.session.user_id);
   if (req.session.user_id) {
     UserModel.findById(req.session.user_id, function(err, useracc) {
       if (useracc) {
         console.log(useracc.username + ' is logged in');
+        console.log(req.session);
         req.currentUser = useracc;
         next();
       } else {
@@ -75,19 +72,23 @@ function checkUser(req, res, next) {
 /* =========== Setting up routing */
 
 router.get('/api', checkUser, function (req, res) {
+  let sess = req.session;
+  let saltValue = bcrypt.genSaltSync(SALT_WORK_FACTOR);
+  let tokenValue = saltValue + ":" + bcrypt.hashSync((saltValue + ":" + req.session.secretkey), saltValue);
+  console.log('salt generated: ' + saltValue);
+  console.log('token saved: ' + tokenValue);
+  sess.token = tokenValue;
+  res.cookie('CSRF-TOKEN',tokenValue, { httpOnly: true });
   res.send('API is running');
 });
 
-/*router.get('/form', function (req, res) {
-  res.send(req.csrfToken());
-});*/
-
-/*router.get('/testform', function(req, res) {
-  res.render('index', { csrfToken: req.csrfToken() })
-});*/
-
-router.post('/testprocess', parseBody, function(req, res){
-  res.send('<p>Your favorite color is "' + req.body.favoriteColor + '".');
+router.get('/apitherapy', checkUser, function (req, res) {
+  let sess = req.session;
+  let saltValue = sess.token.split(':')[0];
+  let tokenValue = saltValue + ":" + bcrypt.hashSync((saltValue + ":" + sess.secretkey), saltValue);
+  console.log('token generated: ' + tokenValue);
+  console.log('hashes match: ' + (sess.token === tokenValue));
+  res.send('APITherapy is running');
 });
 
 router.get('/api/getuserslist', function (req, res) {
@@ -179,8 +180,14 @@ router.post('/api/sendauthinfo', parseBody, function (req, res) {
       if (err) throw err;
       if (isMatch) {
         sess.user_id = useracc._id;
-        console.log(sess);
-        return res.send(useracc._id);
+
+        // TODO: Разобраться, как пихать соль в сессию асинхронно
+
+        if (!sess.secretkey) {
+          sess.secretkey = bcrypt.genSaltSync(SALT_WORK_FACTOR);
+        }
+
+        return res.send('session created');
       }
       else {
         return res.send('password doesnt match');
