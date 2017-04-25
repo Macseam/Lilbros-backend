@@ -20,7 +20,7 @@ let app = express();
 /* =========== Setting up middleware options */
 
 let corsOptions = {
-  origin: 'http://localhost:8090',
+  origin: true,
   //methods: ['OPTIONS','HEAD','GET','POST'],
   optionsSuccessStatus: 200,
   credentials: true
