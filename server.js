@@ -49,16 +49,17 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use(session(sess));
 
-let router = express.Router();
-app.use(router);
-
-router.use(function(req, res, next) {
-  console.log('mid session info:');
-  console.log(req.session);
-  next();
-});
+/*let router = express.Router();
+app.use(router);*/
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(function(req, res, next) {
+  console.log('mid session info:');
+  console.log(req.session);
+  console.log(req.sessionID);
+  next();
+});
 
 function checkUser(req, res, next) {
   if (req.session.user_id) {
@@ -112,7 +113,7 @@ function checkUser(req, res, next) {
 
 /* =========== Setting up routing */
 
-router.get('/api', checkUser, function (req, res) {
+app.get('/api', checkUser, function (req, res) {
   let sess = req.session;
   let saltValue = bcrypt.genSaltSync(SALT_WORK_FACTOR);
   let tokenValue = bcrypt.hashSync((saltValue + ":" + req.session.secretkey), saltValue);
@@ -123,7 +124,7 @@ router.get('/api', checkUser, function (req, res) {
   res.send('API is running');
 });
 
-router.get('/apitherapy', checkUser, function (req, res) {
+app.get('/apitherapy', checkUser, function (req, res) {
   let sess = req.session;
   let saltValue = sess.token.substr(0,29);
   console.log('salt calculated: ' + saltValue);
@@ -133,7 +134,7 @@ router.get('/apitherapy', checkUser, function (req, res) {
   res.send('APITherapy is running');
 });
 
-router.get('/api/getuserslist', function (req, res) {
+app.get('/api/getuserslist', function (req, res) {
   return UserModel.find(function (err, users) {
     if (!err) {
       return res.send(users);
@@ -146,7 +147,7 @@ router.get('/api/getuserslist', function (req, res) {
   });
 });
 
-router.post('/api/setnewuser', function (req, res) {
+app.post('/api/setnewuser', function (req, res) {
   return UserModel.find(function (err, userAccount) {
     if (!err && userAccount && userAccount.length === 0) {
       let useracc = new UserModel({
@@ -192,7 +193,7 @@ router.post('/api/setnewuser', function (req, res) {
   });
 });
 
-router.delete('/api/deleteuser/:id', function (req, res) {
+app.delete('/api/deleteuser/:id', function (req, res) {
   return UserModel.findById(req.params.id, function (err, useracc) {
     if(!useracc) {
       res.statusCode = 404;
@@ -211,7 +212,7 @@ router.delete('/api/deleteuser/:id', function (req, res) {
   });
 });
 
-router.post('/api/sendauthinfo', parseBody, function (req, res) {
+app.post('/api/sendauthinfo', parseBody, function (req, res) {
   let sess = req.session;
   return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
     if(!useracc) {
@@ -256,7 +257,7 @@ router.post('/api/sendauthinfo', parseBody, function (req, res) {
   });
 });
 
-router.get('/api/articles', function (req, res) {
+app.get('/api/articles', function (req, res) {
   return ArticleModel.find(function (err, articles) {
     if (!err) {
       return res.send(articles);
@@ -269,7 +270,7 @@ router.get('/api/articles', function (req, res) {
   });
 });
 
-router.post('/api/articles', function (req, res) {
+app.post('/api/articles', function (req, res) {
   let article = new ArticleModel({
     title: req.body.title || null,
     author: req.body.author || null,
@@ -298,7 +299,7 @@ router.post('/api/articles', function (req, res) {
   });
 });
 
-router.get('/sesstest', function (req, res) {
+app.get('/sesstest', function (req, res) {
   let resSess = req.session;
   if (resSess.views) {
     resSess.views++;
@@ -309,7 +310,7 @@ router.get('/sesstest', function (req, res) {
   }
 });
 
-router.get('/api/articles/:id', function (req, res) {
+app.get('/api/articles/:id', function (req, res) {
   return ArticleModel.find({"slug": req.params.id}, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -338,7 +339,7 @@ router.get('/api/articles/:id', function (req, res) {
   });
 });
 
-router.get('/api/details/:id', function (req, res) {
+app.get('/api/details/:id', function (req, res) {
   return ArticleModel.findOne({"slug": req.params.id}, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -354,7 +355,7 @@ router.get('/api/details/:id', function (req, res) {
   });
 });
 
-router.put('/api/articles/:id', function (req, res) {
+app.put('/api/articles/:id', function (req, res) {
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -385,7 +386,7 @@ router.put('/api/articles/:id', function (req, res) {
   });
 });
 
-router.delete('/api/articles/:id', function (req, res) {
+app.delete('/api/articles/:id', function (req, res) {
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -404,7 +405,7 @@ router.delete('/api/articles/:id', function (req, res) {
   });
 });
 
-router.get('/ErrorExample', function (req, res, next) {
+app.get('/ErrorExample', function (req, res, next) {
   next(new Error('Random error!'));
 });
 
