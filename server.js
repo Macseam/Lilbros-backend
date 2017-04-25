@@ -1,5 +1,6 @@
 /* =========== Importing modules */
 
+const uuidV1 = require('uuid/v1');
 let config = require('./libs/config');
 let path = require('path');
 let log = require('./libs/log')(module);
@@ -30,8 +31,11 @@ let parseUrlencoded = bodyParser.urlencoded({ extended: true });
 let parseBody = [parseJson, parseUrlencoded];
 
 let sess = {
+  genid: function(req) {
+    return uuidV1();
+  },
   secret: 'keyboard cat',
-  resave: false,
+  resave: true,
   saveUninitialized: true,
   store: new MongoStore({mongooseConnection})
 };
@@ -48,15 +52,52 @@ app.use(session(sess));
 let router = express.Router();
 app.use(router);
 
+router.use(function(req, res, next) {
+  console.log('mid session info:');
+  console.log(req.session);
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 function checkUser(req, res, next) {
   if (req.session.user_id) {
-    UserModel.findById(req.session.user_id, function(err, useracc) {
+    let sess = req.session;
+    console.log('searching for ' + sess.user_id);
+    UserModel.findById(sess.user_id, function(err, useracc) {
+
+      /* Checking user id in session */
       if (useracc) {
         console.log(useracc.username + ' is logged in');
-        console.log(req.session);
         req.currentUser = useracc;
+
+        /* Checking and renewing token */
+        if (sess.token) {
+          let saltValue = sess.token.substr(0,29);
+          console.log('salt calculated: ' + saltValue);
+          let tokenValue = bcrypt.hashSync((saltValue + ":" + sess.secretkey), saltValue);
+          console.log('token generated: ' + tokenValue);
+          console.log('hashes match: ' + (sess.token === tokenValue));
+
+          if (sess.token === tokenValue) {
+            console.log('authorized user, all ok');
+          }
+
+          saltValue = bcrypt.genSaltSync(SALT_WORK_FACTOR);
+          tokenValue = bcrypt.hashSync((saltValue + ":" + sess.secretkey), saltValue);
+          sess.token = tokenValue;
+          res.cookie('CSRF-TOKEN',tokenValue);
+        }
+        else {
+          console.log('no token found, generating a new one');
+          let saltValue = bcrypt.genSaltSync(SALT_WORK_FACTOR);
+          let tokenValue = bcrypt.hashSync((saltValue + ":" + req.session.secretkey), saltValue);
+          console.log('salt generated: ' + saltValue);
+          console.log('token saved: ' + tokenValue);
+          sess.token = tokenValue;
+          res.cookie('CSRF-TOKEN',tokenValue);
+        }
+
         next();
       } else {
         console.log('no matched user');
@@ -64,7 +105,7 @@ function checkUser(req, res, next) {
       }
     });
   } else {
-    console.log('no user_id');
+    console.log('no user_id available in session');
     res.send('redirect to login');
   }
 }
@@ -78,7 +119,7 @@ router.get('/api', checkUser, function (req, res) {
   console.log('salt generated: ' + saltValue);
   console.log('token saved: ' + tokenValue);
   sess.token = tokenValue;
-  res.cookie('CSRF-TOKEN',tokenValue, { httpOnly: true });
+  res.cookie('CSRF-TOKEN',tokenValue);
   res.send('API is running');
 });
 
@@ -177,6 +218,9 @@ router.post('/api/sendauthinfo', parseBody, function (req, res) {
       res.statusCode = 404;
       return res.send({ error: 'User not found' });
     }
+    else {
+      console.log('user named ' + useracc.username + ' is found');
+    }
     useracc.comparePassword(req.body.password, function(err, isMatch) {
       if (err) throw err;
       if (isMatch) {
@@ -186,7 +230,22 @@ router.post('/api/sendauthinfo', parseBody, function (req, res) {
 
         if (!sess.secretkey) {
           sess.secretkey = bcrypt.genSaltSync(SALT_WORK_FACTOR);
+          let tokenValue = bcrypt.hashSync((sess.secretkey + ":" + req.session.secretkey), sess.secretkey);
+          sess.token = tokenValue;
+          res.cookie('CSRF-TOKEN',tokenValue);
         }
+        else {
+          let tokenValue = bcrypt.hashSync((sess.secretkey + ":" + req.session.secretkey), sess.secretkey);
+          sess.token = tokenValue;
+          res.cookie('CSRF-TOKEN',tokenValue);
+        }
+
+        req.session = sess;
+        req.session.save( function(err) {
+          req.session.reload( function (err) {
+            console.log('session saved');
+          });
+        });
 
         return res.send('session created');
       }
