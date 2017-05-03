@@ -98,16 +98,17 @@ function checkUser(req, res, next) {
           sess.token = tokenValue;
           res.cookie('CSRF-TOKEN',tokenValue);
         }
-
+        res.status(200);
         next();
       } else {
         console.log('no matched user');
-        res.send('redirect to login');
+        res.status(403).send('access denied');
       }
     });
   } else {
     console.log('no user_id available in session');
-    res.send('redirect to login');
+    res.status(200);
+    next();
   }
 }
 
@@ -115,23 +116,15 @@ function checkUser(req, res, next) {
 
 app.get('/api', checkUser, function (req, res) {
   let sess = req.session;
-  let saltValue = bcrypt.genSaltSync(SALT_WORK_FACTOR);
-  let tokenValue = bcrypt.hashSync((saltValue + ":" + req.session.secretkey), saltValue);
-  console.log('salt generated: ' + saltValue);
-  console.log('token saved: ' + tokenValue);
-  sess.token = tokenValue;
-  res.cookie('CSRF-TOKEN',tokenValue);
-  res.send('API is running');
-});
-
-app.get('/apitherapy', checkUser, function (req, res) {
-  let sess = req.session;
-  let saltValue = sess.token.substr(0,29);
-  console.log('salt calculated: ' + saltValue);
-  let tokenValue = bcrypt.hashSync((saltValue + ":" + sess.secretkey), saltValue);
-  console.log('token generated: ' + tokenValue);
-  console.log('hashes match: ' + (sess.token === tokenValue));
-  res.send('APITherapy is running');
+  if (sess.user_id && res.statusCode === 200) {
+    res.send(req.currentUser.username);
+  }
+  else if (res.statusCode === 200) {
+    res.send('guest user');
+  }
+  else {
+    res.status(403).send('access denied');
+  }
 });
 
 app.get('/api/getuserslist', function (req, res) {
@@ -248,7 +241,7 @@ app.post('/api/sendauthinfo', parseBody, function (req, res) {
           });
         });
 
-        return res.send('session created');
+        return res.send(useracc.username);
       }
       else {
         return res.send('password doesnt match');
@@ -258,15 +251,23 @@ app.post('/api/sendauthinfo', parseBody, function (req, res) {
 });
 
 app.get('/api/articles', function (req, res) {
+  let sess = req.session;
   return ArticleModel.find(function (err, articles) {
     if (!err) {
-      return res.send(articles);
+      //return res.send(articles);
     }
     else {
       res.statusCode = 500;
       log.error('Internal error(%d): %s', res.statusCode, err.message);
       return res.send({error: 'Server error'});
     }
+  }).lean().exec(function(err, data){
+    if (sess.user_id) {
+      data.forEach(function(item){
+        item.deleteLink = 'api/articles/' + item._id;
+      });
+    }
+    return res.send(data);
   });
 });
 
