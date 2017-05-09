@@ -114,6 +114,26 @@ function checkUser(req, res, next) {
 
 /* =========== Setting up routing */
 
+app.get('/logout', checkUser, function (req, res) {
+  let sess = req.session;
+  if (sess.user_id && res.statusCode === 200) {
+    req.session.regenerate(function(err) {
+      if (!err) {
+        res.redirect('/api');
+      }
+      else {
+        res.send('unable to destroy session: ' + err);
+      }
+    });
+  }
+  else if (res.statusCode === 200) {
+    res.send('no logged user to log out');
+  }
+  else {
+    res.status(403).send('access denied');
+  }
+});
+
 app.get('/api', checkUser, function (req, res) {
   let sess = req.session;
   if (sess.user_id && res.statusCode === 200) {
