@@ -408,22 +408,28 @@ app.put('/api/articles/:id', function (req, res) {
 });
 
 app.delete('/api/articles/:id', function (req, res) {
-  return ArticleModel.findById(req.params.id, function (err, article) {
-    if(!article) {
-      res.statusCode = 404;
-      return res.send({ error: 'Not found' });
-    }
-    return article.remove(function (err) {
-      if (!err) {
-        log.info("article removed");
-        return res.send({ status: 'OK' });
-      } else {
-        res.statusCode = 500;
-        log.error('Internal error(%d): %s',res.statusCode,err.message);
-        return res.send({ error: 'Server error' });
+  if (req.params.id) {
+    return ArticleModel.findById(req.params.id, function (err, article) {
+      if(!article) {
+        res.statusCode = 404;
+        return res.send({ error: 'Not found' });
       }
+      return article.remove(function (err) {
+        if (!err) {
+          log.info("article removed");
+          return res.send({ status: 'OK' });
+        } else {
+          res.statusCode = 500;
+          log.error('Internal error(%d): %s',res.statusCode,err.message);
+          return res.send({ error: 'Server error' });
+        }
+      });
     });
-  });
+  } else {
+    res.statusCode = 500;
+    log.error('Internal error(%d): %s',res.statusCode,'no id supplied');
+    return res.send({ error: 'Server error' });
+  }
 });
 
 app.get('/ErrorExample', function (req, res, next) {
