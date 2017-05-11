@@ -243,7 +243,7 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res)
   let sess = req.session;
   return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
     if(!useracc) {
-      res.statusCode = 404;
+      res.statusCode = 403;
       return res.send({ error: 'User not found' });
     }
     else {
