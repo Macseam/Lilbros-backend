@@ -49,7 +49,7 @@ let bruteforce = new ExpressBrute(BruteForceStore);
 
 /* =========== Including middleware */
 
-app.use(cors(corsOptions));
+//app.use(cors(corsOptions));
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
