@@ -244,7 +244,7 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res)
   return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
     if(!useracc) {
       res.statusCode = 403;
-      return res.send({ error: 'User not found' });
+      return res.send({ error: 'access denied, wrong login/password' });
     }
     else {
       console.log('user named ' + useracc.username + ' is found');
