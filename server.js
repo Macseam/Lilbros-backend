@@ -54,21 +54,21 @@ app.use(router);*/
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(function(req, res, next) {
+/*app.use(function(req, res, next) {
   console.log('mid session info:');
   console.log(req.session);
   console.log(req.sessionID);
   next();
-});
+});*/
 
 function checkUser(req, res, next) {
-  if (req.session.user_id) {
-    let sess = req.session;
+  let sess = req.session;
+  if (sess.user_id) {
     console.log('searching for ' + sess.user_id);
     UserModel.findById(sess.user_id, function(err, useracc) {
 
       /* Checking user id in session */
-      if (useracc) {
+      if (useracc && sess.token && req.headers['x-csrf-token'] && (sess.token === req.headers['x-csrf-token'])) {
         console.log(useracc.username + ' is logged in');
         req.currentUser = useracc;
 
@@ -114,7 +114,7 @@ function checkUser(req, res, next) {
 
 /* =========== Setting up routing */
 
-app.get('/logout', checkUser, function (req, res) {
+app.get('/logout', function (req, res) {
   let sess = req.session;
   if (sess.user_id && res.statusCode === 200) {
     req.session.regenerate(function(err) {
@@ -134,10 +134,17 @@ app.get('/logout', checkUser, function (req, res) {
   }
 });
 
-app.get('/api', checkUser, function (req, res) {
+app.get('/api', function (req, res) {
   let sess = req.session;
   if (sess.user_id && res.statusCode === 200) {
-    res.send(req.currentUser.username);
+    UserModel.findById(sess.user_id, function(err, useracc) {
+      if (!err) {
+        res.send(useracc.username);
+      }
+      else {
+        res.status(403).send('access denied');
+      }
+    });
   }
   else if (res.statusCode === 200) {
     res.send('guest user');
@@ -206,7 +213,7 @@ app.post('/api/setnewuser', function (req, res) {
   });
 });
 
-app.delete('/api/deleteuser/:id', function (req, res) {
+app.delete('/api/deleteuser/:id', checkUser, function (req, res) {
   return UserModel.findById(req.params.id, function (err, useracc) {
     if(!useracc) {
       res.statusCode = 404;
@@ -291,7 +298,20 @@ app.get('/api/articles', function (req, res) {
   });
 });
 
-app.post('/api/articles', function (req, res) {
+app.get('/api/toparticles', function (req, res) {
+  return ArticleModel.find({"parent": null},function (err, articles) {
+    if (!err) {
+      return res.send(articles);
+    }
+    else {
+      res.statusCode = 500;
+      log.error('Internal error(%d): %s', res.statusCode, err.message);
+      return res.send({error: 'Server error'});
+    }
+  });
+});
+
+app.post('/api/articles', checkUser, function (req, res) {
   let article = new ArticleModel({
     title: req.body.title || null,
     author: req.body.author || null,
@@ -376,19 +396,19 @@ app.get('/api/details/:id', function (req, res) {
   });
 });
 
-app.put('/api/articles/:id', function (req, res) {
+app.put('/api/articles/:id', checkUser, function (req, res) {
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
       res.statusCode = 404;
       return res.send({ error: 'Not found' });
     }
 
-    article.title = req.body.title;
-    article.description = req.body.description;
-    article.author = req.body.author;
-    article.parent = req.body.parent;
-    article.slug = req.body.slug;
-    article.images = req.body.images;
+    article.title = req.body.title || article.title;
+    article.description = req.body.description || article.description;
+    article.author = req.body.author || article.author;
+    article.parent = req.body.parent || article.parent;
+    article.slug = req.body.slug || article.slug;
+    article.images = req.body.images || article.images;
     return article.save(function (err) {
       if (!err) {
         log.info("article updated");
@@ -407,7 +427,7 @@ app.put('/api/articles/:id', function (req, res) {
   });
 });
 
-app.delete('/api/articles/:id', function (req, res) {
+app.delete('/api/articles/:id', checkUser, function (req, res) {
   if (req.params.id) {
     return ArticleModel.findById(req.params.id, function (err, article) {
       if(!article) {
