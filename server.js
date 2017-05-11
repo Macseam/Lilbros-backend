@@ -9,11 +9,16 @@ let cors = require('cors');
 let bcrypt = require('bcrypt');
 let SALT_WORK_FACTOR = 10;
 let session = require('express-session');
+let ExpressBrute = require('express-brute');
+let BruteMongooseStore = require('express-brute-mongoose');
 let bodyParser = require('body-parser');
 let UserModel = require('./libs/mongoose').UserModel;
 let ArticleModel = require('./libs/mongoose').ArticleModel;
+let BruteForceModel = require('./libs/mongoose').BruteForceModel;
 let mongooseConnection = require('./libs/mongoose').db;
 const MongoStore = require('connect-mongo')(session);
+
+let BruteForceStore = new BruteMongooseStore(BruteForceModel);
 
 let app = express();
 
@@ -39,6 +44,8 @@ let sess = {
   saveUninitialized: true,
   store: new MongoStore({mongooseConnection})
 };
+
+let bruteforce = new ExpressBrute(BruteForceStore);
 
 /* =========== Including middleware */
 
@@ -167,7 +174,7 @@ app.get('/api/getuserslist', function (req, res) {
   });
 });
 
-app.post('/api/setnewuser', function (req, res) {
+app.post('/api/setnewuser', bruteforce.prevent, function (req, res) {
   return UserModel.find(function (err, userAccount) {
     if (!err && userAccount && userAccount.length === 0) {
       let useracc = new UserModel({
@@ -213,7 +220,7 @@ app.post('/api/setnewuser', function (req, res) {
   });
 });
 
-app.delete('/api/deleteuser/:id', checkUser, function (req, res) {
+app.delete('/api/deleteuser/:id', bruteforce.prevent, checkUser, function (req, res) {
   return UserModel.findById(req.params.id, function (err, useracc) {
     if(!useracc) {
       res.statusCode = 404;
@@ -232,7 +239,7 @@ app.delete('/api/deleteuser/:id', checkUser, function (req, res) {
   });
 });
 
-app.post('/api/sendauthinfo', parseBody, function (req, res) {
+app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res) {
   let sess = req.session;
   return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
     if(!useracc) {
@@ -271,7 +278,7 @@ app.post('/api/sendauthinfo', parseBody, function (req, res) {
         return res.send(useracc.username);
       }
       else {
-        return res.send('password doesnt match');
+        res.status(403).send('access denied, wrong login/password');
       }
     });
   });
@@ -311,7 +318,7 @@ app.get('/api/toparticles', function (req, res) {
   });
 });
 
-app.post('/api/articles', checkUser, function (req, res) {
+app.post('/api/articles', bruteforce.prevent, checkUser, function (req, res) {
   let article = new ArticleModel({
     title: req.body.title || null,
     author: req.body.author || null,
@@ -396,7 +403,7 @@ app.get('/api/details/:id', function (req, res) {
   });
 });
 
-app.put('/api/articles/:id', checkUser, function (req, res) {
+app.put('/api/articles/:id', bruteforce.prevent, checkUser, function (req, res) {
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
       res.statusCode = 404;
@@ -427,7 +434,7 @@ app.put('/api/articles/:id', checkUser, function (req, res) {
   });
 });
 
-app.delete('/api/articles/:id', checkUser, function (req, res) {
+app.delete('/api/articles/:id', bruteforce.prevent, checkUser, function (req, res) {
   if (req.params.id) {
     return ArticleModel.findById(req.params.id, function (err, article) {
       if(!article) {

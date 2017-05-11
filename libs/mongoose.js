@@ -5,6 +5,8 @@ Schema = mongoose.Schema,
 bcrypt = require('bcrypt'),
 SALT_WORK_FACTOR = 10;
 
+let BruteForceSchema = require('express-brute-mongoose/dist/schema');
+
 mongoose.Promise = require('bluebird');
 let log = require('./log')(module);
 
@@ -112,7 +114,9 @@ Article.path('title').validate(function (v) {
 
 let UserModel = mongoose.model('User', User);
 let ArticleModel = mongoose.model('Article', Article);
+let BruteForceModel = mongoose.model('bruteforce', BruteForceSchema);
 
+module.exports.BruteForceModel = BruteForceModel;
 module.exports.UserModel = UserModel;
 module.exports.ArticleModel = ArticleModel;
 module.exports.db = db;
