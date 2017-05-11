@@ -49,7 +49,7 @@ let bruteforce = new ExpressBrute(BruteForceStore);
 
 /* =========== Including middleware */
 
-/app.use(cors(corsOptions));
+app.use(cors(corsOptions));
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -82,10 +82,10 @@ function checkUser(req, res, next) {
         /* Checking and renewing token */
         if (sess.token) {
           let saltValue = sess.token.substr(0,29);
-          console.log('salt calculated: ' + saltValue);
+          //console.log('salt calculated: ' + saltValue);
           let tokenValue = bcrypt.hashSync((saltValue + ":" + sess.secretkey), saltValue);
-          console.log('token generated: ' + tokenValue);
-          console.log('hashes match: ' + (sess.token === tokenValue));
+          //console.log('token generated: ' + tokenValue);
+          //console.log('hashes match: ' + (sess.token === tokenValue));
 
           if (sess.token === tokenValue) {
             console.log('authorized user, all ok');
@@ -97,11 +97,11 @@ function checkUser(req, res, next) {
           res.cookie('CSRF-TOKEN',tokenValue);
         }
         else {
-          console.log('no token found, generating a new one');
+          //console.log('no token found, generating a new one');
           let saltValue = bcrypt.genSaltSync(SALT_WORK_FACTOR);
           let tokenValue = bcrypt.hashSync((saltValue + ":" + req.session.secretkey), saltValue);
-          console.log('salt generated: ' + saltValue);
-          console.log('token saved: ' + tokenValue);
+          //console.log('salt generated: ' + saltValue);
+          //console.log('token saved: ' + tokenValue);
           sess.token = tokenValue;
           res.cookie('CSRF-TOKEN',tokenValue);
         }
