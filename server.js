@@ -1,5 +1,9 @@
 /* =========== Importing modules */
 
+let _ = require('lodash');
+let fs = require('fs');
+const mime = require('mime-kind');
+
 const uuidV1 = require('uuid/v1');
 let config = require('./libs/config');
 let path = require('path');
@@ -12,6 +16,25 @@ let session = require('express-session');
 let ExpressBrute = require('express-brute');
 let BruteMongooseStore = require('express-brute-mongoose');
 let bodyParser = require('body-parser');
+let multer  = require('multer');
+let upload = multer({
+  storage: multer.diskStorage(
+    {
+      destination: function (req, file, cb) {
+        cb(null, 'public/uploads')
+      },
+      filename: function (req, file, cb) {
+        cb(null, file.fieldname + '-' + Date.now() + '.jpg')
+      }
+    }
+  ),
+  fileFilter: (req, file, cb)=>{
+    cb(null, file.mimetype.indexOf('image/') !== -1);
+    if (file.mimetype.indexOf('image/') === -1) {
+      cb(new Error('Attempt to upload non-image file'));
+    }
+  }
+});
 let UserModel = require('./libs/mongoose').UserModel;
 let ArticleModel = require('./libs/mongoose').ArticleModel;
 let BruteForceModel = require('./libs/mongoose').BruteForceModel;
@@ -403,19 +426,50 @@ app.get('/api/details/:id', function (req, res) {
   });
 });
 
-app.put('/api/articles/:id', bruteforce.prevent, checkUser, function (req, res) {
+app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, res) {
+  let receivedBody;
+  if (req.body && req.body.body) {
+    receivedBody = JSON.parse(req.body.body);
+  }
+  else {
+    receivedBody = req.body;
+  }
   return ArticleModel.findById(req.params.id, function (err, article) {
     if(!article) {
       res.statusCode = 404;
       return res.send({ error: 'Not found' });
     }
 
-    article.title = req.body.title || article.title;
-    article.description = req.body.description || article.description;
-    article.author = req.body.author || article.author;
-    article.parent = req.body.parent || article.parent;
-    article.slug = req.body.slug || article.slug;
-    article.images = req.body.images || article.images;
+    article.title = receivedBody.title || article.title;
+    article.description = receivedBody.description || article.description;
+    article.author = receivedBody.author || article.author;
+    article.parent = receivedBody.parent || article.parent;
+    article.slug = receivedBody.slug || article.slug;
+    if (req.file && !_.isEmpty(article.images)) {
+      let fileToDelete = path.join(__dirname, 'public/uploads/' + article.images[0].url);
+      fs.unlink(fileToDelete, console.log(fileToDelete + ' successfully deleted because of overwriting'));
+      article.images = [{kind: 'cover', url: req.file.filename}];
+    }
+    else if (req.file && _.isEmpty(article.images)) {
+      article.images = [{kind: 'cover', url: req.file.filename}];
+    }
+    else if (req.body.cover === 'null' && !_.isEmpty(article.images)) {
+      let fileToDelete = path.join(__dirname, 'public/uploads/' + article.images[0].url);
+      fs.unlink(fileToDelete, console.log(fileToDelete + ' successfully deleted because an image deleted from ui'));
+      article.images = [];
+    }
+    if (req.file) {
+      let receivedFile = path.join(__dirname, 'public/uploads/' + req.file.filename);
+      let readStream = fs.createReadStream(receivedFile);
+      readStream.on('end', ()=> {
+        let realMimeType = mime(readStream);
+        if (realMimeType.mime !== 'image/jpeg') {
+          fs.unlink(receivedFile, console.log(receivedFile + ' deleted because it was not a jpeg image'));
+          article.images = [];
+        }
+      });
+      readStream.destroy();
+    }
     return article.save(function (err) {
       if (!err) {
         log.info("article updated");

@@ -26,7 +26,6 @@ db.once('open', function callback() {
 let Images = new Schema({
   kind: {
     type: String,
-    enum: ['thumbnail', 'detail'],
     required: true
   },
   url: {
