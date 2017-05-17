@@ -8,8 +8,7 @@ let path = require('path');
 let log = require('../libs/log')(module);
 let express = require('express');
 let cors = require('cors');
-let bcrypt = require('bcrypt');
-let SALT_WORK_FACTOR = 10;
+let CryptoJS = require("crypto-js");
 let session = require('express-session');
 let ExpressBrute = require('express-brute');
 let BruteMongooseStore = require('express-brute-mongoose');
@@ -194,7 +193,7 @@ app.delete('/api/deleteuser/:id', bruteforce.prevent, checkUser, function (req, 
   });
 });
 
-app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res) {
+app.post('/api/sendauthinfo', parseBody, function (req, res) {
   let sess = req.session;
   return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
     if(!useracc) {
@@ -209,25 +208,35 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res)
         if (isMatch) {
           sess.user_id = useracc._id;
 
+          const jwtHeader = {
+            "alg": "HS256",
+            "typ": "JWT"
+          };
+          const jwtPayload = {
+            "loggedUserId": sess.user_id,
+            "iat": Date.now()
+          };
+          const jwtKey = 'JoelAndEllie';
+          const jwtUnsigned = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+            + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64');
+          const jwtSignature = CryptoJS.SHA256(jwtUnsigned, jwtKey);
+
+          const jwtResult = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+            + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
+            + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
+
           // TODO: Разобраться, как пихать соль в сессию асинхронно
 
-          if (!sess.secretkey) {
-            sess.secretkey = bcrypt.genSaltSync(SALT_WORK_FACTOR);
-            let tokenValue = bcrypt.hashSync((sess.secretkey + ":" + req.session.secretkey), sess.secretkey);
-            sess.token = tokenValue;
-            res.cookie('CSRF-TOKEN',tokenValue);
-          }
-          else {
-            let tokenValue = bcrypt.hashSync((sess.secretkey + ":" + req.session.secretkey), sess.secretkey);
-            sess.token = tokenValue;
-            res.cookie('CSRF-TOKEN',tokenValue);
-          }
+          log.info(jwtResult);
 
-          req.session = sess;
-          req.session.save( function(err) {
-            req.session.reload( function (err) {
-              log.info('session saved');
-            });
+          res.cookie('auth',jwtResult);
+
+          let decodedJwt = jwtResult.split('.');
+          decodedJwt.map(function(decItem, index){
+            console.log(new Buffer(decItem, 'base64').toString('ascii'));
+            if (new Buffer(decItem, 'base64').toString('ascii') === JSON.stringify(jwtSignature)) {
+              console.log('signature matches!');
+            }
           });
 
           return res.send(useracc.username);
