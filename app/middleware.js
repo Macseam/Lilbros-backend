@@ -6,7 +6,7 @@ let config = require('../libs/config');
 let path = require('path');
 let log = require('../libs/log')(module);
 let express = require('express');
-
+let CryptoJS = require("crypto-js");
 let session = require('express-session');
 let UserModel = require('../libs/mongoose').UserModel;
 let mongooseConnection = require('../libs/mongoose').db;
@@ -35,11 +35,26 @@ function checkUser(req, res, next) {
   if (sess.user_id) {
     log.info('searching for session id ' + sess.user_id);
     UserModel.findById(sess.user_id, function(err, useracc) {
-
       /* Checking user id in session */
-      if (useracc && sess.token && req.headers['x-csrf-token'] && (sess.token === req.headers['x-csrf-token'])) {
-        res.status(200);
-        next();
+      if (useracc && req.headers['authorization']) {
+        const jwtKey = 'JoelAndEllie';
+        let receivedToken = req.headers['authorization'].split(' ');
+        const decodedJwt = receivedToken[1].split('.');
+        const jwtSignature = CryptoJS.SHA256(decodedJwt[0] + '.' + decodedJwt[1], jwtKey);
+        let isValid = false;
+        decodedJwt.map(function(decItem, index) {
+          if (new Buffer(decItem, 'base64').toString('ascii') === JSON.stringify(jwtSignature)) {
+            isValid = true;
+          }
+        });
+        if (isValid) {
+          res.status(200);
+          next();
+        }
+        else {
+          log.warn('invalid token');
+          res.status(403).send('access denied');
+        }
       } else {
         log.warn('no matched user');
         res.status(403).send('access denied');

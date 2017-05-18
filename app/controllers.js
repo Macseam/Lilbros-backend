@@ -225,19 +225,7 @@ app.post('/api/sendauthinfo', parseBody, function (req, res) {
             + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
             + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
 
-          // TODO: Разобраться, как пихать соль в сессию асинхронно
-
-          log.info(jwtResult);
-
           res.cookie('auth',jwtResult);
-
-          let decodedJwt = jwtResult.split('.');
-          decodedJwt.map(function(decItem, index){
-            console.log(new Buffer(decItem, 'base64').toString('ascii'));
-            if (new Buffer(decItem, 'base64').toString('ascii') === JSON.stringify(jwtSignature)) {
-              console.log('signature matches!');
-            }
-          });
 
           return res.send(useracc.username);
         }
