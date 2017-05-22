@@ -108,7 +108,7 @@ app.get('/api', function (req, res) {
     });
   }
   else if (res.statusCode === 200) {
-    res.send('guest user');
+    res.end();
   }
   else {
     res.status(403).send('access denied');
