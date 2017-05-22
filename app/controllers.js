@@ -58,7 +58,7 @@ let sess = {
   genid: function(req) {
     return uuidV1();
   },
-  secret: 'keyboard cat',
+  secret: 'JoelAndEllie',
   resave: true,
   saveUninitialized: true,
   store: new MongoStore({mongooseConnection})
