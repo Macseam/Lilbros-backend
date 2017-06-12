@@ -32,6 +32,7 @@ let upload = multer({
     }
   }
 });
+let thumb = require('node-thumbnail').thumb;
 let UserModel = require('../libs/mongoose').UserModel;
 let ArticleModel = require('../libs/mongoose').ArticleModel;
 let BruteForceModel = require('../libs/mongoose').BruteForceModel;
@@ -193,7 +194,7 @@ app.delete('/api/deleteuser/:id', bruteforce.prevent, checkUser, function (req, 
   });
 });
 
-app.post('/api/sendauthinfo', parseBody, function (req, res) {
+app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res) {
   let sess = req.session;
   return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
     if(!useracc) {
@@ -328,7 +329,7 @@ app.get('/api/details/:id', function (req, res) {
   });
 });
 
-app.post('/api/articles', checkUser, upload.single('cover'), function (req, res) {
+app.post('/api/articles', /*bruteforce.prevent, */checkUser, upload.single('cover'), function (req, res) {
   let receivedBody;
   if (req.body && req.body.body) {
     receivedBody = JSON.parse(req.body.body);
@@ -345,39 +346,71 @@ app.post('/api/articles', checkUser, upload.single('cover'), function (req, res)
     images: []
   });
   if (req.file) {
+    let realMimeType = null;
     article.images = [{kind: 'cover', url: req.file.filename}];
     let receivedFile = path.join(__dirname, '../public/uploads/' + req.file.filename);
+
+    // Create stream from image file
     let readStream = fs.createReadStream(receivedFile);
-    readStream.on('end', ()=> {
-      let realMimeType = mime(readStream);
-      if (realMimeType.mime !== 'image/jpeg') {
-        fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg image'));
-        article.images = [];
+
+    // On stream error - output error message
+    readStream.on('error', function(err) {
+      log.error(err);
+    });
+
+    // If stream is readable, read it and try to get mime type
+    readStream.on('readable', function() {
+      let data = readStream.read();
+      if (!realMimeType) {
+        realMimeType = mime(data);
       }
     });
-    readStream.destroy();
-  }
-  article.save(function (err) {
-    if (!err) {
-      log.info('article created');
-      return res.send({status: 'OK', article: article});
-    }
-    else {
-      log.error(err);
-      if (err.name === 'ValidationError') {
-        res.statusCode = 400;
-        res.send({error: 'Validation error'});
+
+    // On stream end - if mime is right, create thumbnail and save article images
+    // if mime is wrong, delete image and do not save
+    readStream.on('end', ()=> {
+      if (realMimeType) {
+        log.info('final mime: ' + realMimeType.mime);
+      }
+      if (realMimeType && realMimeType.mime === 'image/jpeg') {
+        thumb({
+          source: receivedFile,
+          width: 400,
+          'destination': path.join(__dirname, '../public/uploads')
+        }).then(function(files) {
+          article.images.push({kind: 'thumb', url: files[0].dstPath.split('/').slice(-1).join('')});
+          article.save(function (err) {
+            if (!err) {
+              log.info('article created');
+              return res.send({status: 'OK', article: article});
+            }
+            else {
+              log.error(err);
+              if (err.name === 'ValidationError') {
+                res.statusCode = 400;
+                res.send({error: 'Validation error'});
+              }
+              else {
+                res.statusCode = 500;
+                res.send({error: 'Server error'});
+              }
+              log.error('Internal error(%d): %s', res.statusCode, err.message);
+            }
+          });
+          log.info('Successfully thumbnailed');
+        }).catch(function(e) {
+          log.error('Error while thumbnailing', e.toString());
+        });
       }
       else {
-        res.statusCode = 500;
-        res.send({error: 'Server error'});
+        fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg image'));
       }
-      log.error('Internal error(%d): %s', res.statusCode, err.message);
-    }
-  });
+      readStream.destroy();
+    });
+  }
 });
 
-app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, res) {
+app.put('/api/articles/:id', /*bruteforce.prevent, */checkUser, upload.single('cover'), function (req, res) {
   let receivedBody;
   if (req.body && req.body.body) {
     receivedBody = JSON.parse(req.body.body);
@@ -395,50 +428,123 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
     article.author = receivedBody.author || article.author;
     article.parent = receivedBody.parent || article.parent;
     article.slug = receivedBody.slug || article.slug;
-    if (req.file && !_.isEmpty(article.images)) {
-      let fileToDelete = path.join(__dirname, '../public/uploads/' + article.images[0].url);
-      fs.unlink(fileToDelete, log.info(fileToDelete + ' deleted because of overwriting'));
-      article.images = [{kind: 'cover', url: req.file.filename}];
-    }
-    else if (req.file && _.isEmpty(article.images)) {
-      article.images = [{kind: 'cover', url: req.file.filename}];
-    }
-    else if (req.body.cover === 'null' && !_.isEmpty(article.images)) {
-      let fileToDelete = path.join(__dirname, '../public/uploads/' + article.images[0].url);
-      fs.unlink(fileToDelete, log.info(fileToDelete + ' deleted because an image deleted from ui'));
-      article.images = [];
-    }
+
     if (req.file) {
+
+      // Save article with new image
+      let realMimeType = null;
+
       let receivedFile = path.join(__dirname, '../public/uploads/' + req.file.filename);
+
+      // Create stream from image file
       let readStream = fs.createReadStream(receivedFile);
-      readStream.on('end', ()=> {
-        let realMimeType = mime(readStream);
-        if (realMimeType.mime !== 'image/jpeg') {
-          fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg image'));
-          article.images = [];
+
+      // On stream error - output error message
+      readStream.on('error', function(err) {
+        log.error(err);
+      });
+
+      // If stream is readable, read it and try to get mime type
+      readStream.on('readable', function() {
+        let data = readStream.read();
+        if (!realMimeType) {
+          realMimeType = mime(data);
         }
       });
-      readStream.destroy();
-    }
-    return article.save(function (err) {
-      if (!err) {
-        log.info("article updated");
-        return res.send({ status: 'OK', article:article });
-      } else {
-        if(err.name === 'ValidationError') {
-          res.statusCode = 400;
-          res.send({ error: 'Validation error' });
-        } else {
-          res.statusCode = 500;
-          res.send({ error: 'Server error' });
+
+      // On stream end - if mime is right, create thumbnail and save article images
+      // if mime is wrong, delete image and do not save
+      readStream.on('end', ()=> {
+        if (realMimeType) {
+          log.info('final mime: ' + realMimeType.mime);
         }
-        log.error('Internal error(%d): %s',res.statusCode,err.message);
-      }
-    });
+        if (realMimeType && realMimeType.mime === 'image/jpeg') {
+
+          // If cover image exists, delete it
+          if (!_.isEmpty(article.images)) {
+            article.images.map(function(imgObj){
+              fs.stat(path.join(__dirname, '../public/uploads/' + imgObj.url), function (err, stats) {
+                if (err) {
+                  return console.error(err);
+                }
+                fs.unlink(path.join(__dirname, '../public/uploads/' + imgObj.url), log.info(imgObj.url + ' deleted because of overwriting'));
+              });
+            });
+          }
+
+          article.images = [{kind: 'cover', url: req.file.filename}];
+
+          thumb({
+            source: receivedFile,
+            width: 400,
+            'destination': path.join(__dirname, '../public/uploads')
+          }).then(function(files) {
+            article.images.push({kind: 'thumb', url: files[0].dstPath.split('/').slice(-1).join('')});
+            article.save(function (err) {
+              if (!err) {
+                log.info('article saved');
+                return res.send({status: 'OK', article: article});
+              }
+              else {
+                log.error(err);
+                if (err.name === 'ValidationError') {
+                  res.statusCode = 400;
+                  res.send({error: 'Validation error'});
+                }
+                else {
+                  res.statusCode = 500;
+                  res.send({error: 'Server error'});
+                }
+                log.error('Internal error(%d): %s', res.statusCode, err.message);
+              }
+            });
+            log.info('Successfully thumbnailed');
+          }).catch(function(e) {
+            log.error('Error while thumbnailing', e.toString());
+          });
+        }
+        else {
+          fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg image'));
+        }
+        readStream.destroy();
+      });
+    }
+
+    // If there is no new image, delete existing image
+    else if (req.body.cover === 'null' && !_.isEmpty(article.images)) {
+      article.images.map(function(imgObj){
+        fs.stat(path.join(__dirname, '../public/uploads/' + imgObj.url), function (err, stats) {
+          if (err) {
+            return console.error(err);
+          }
+          fs.unlink(path.join(__dirname, '../public/uploads/' + imgObj.url), log.info(imgObj.url + ' deleted because an image deleted from ui'));
+        });
+      });
+      article.images = [];
+      article.save(function (err) {
+        if (!err) {
+          log.info('article saved');
+          return res.send({status: 'OK', article: article});
+        }
+        else {
+          log.error(err);
+          if (err.name === 'ValidationError') {
+            res.statusCode = 400;
+            res.send({error: 'Validation error'});
+          }
+          else {
+            res.statusCode = 500;
+            res.send({error: 'Server error'});
+          }
+          log.error('Internal error(%d): %s', res.statusCode, err.message);
+        }
+      });
+    }
+
   });
 });
 
-app.delete('/api/articles/:id', bruteforce.prevent, checkUser, function (req, res) {
+app.delete('/api/articles/:id', /*bruteforce.prevent, */checkUser, function (req, res) {
   if (req.params.id) {
     return ArticleModel.findById(req.params.id, function (err, article) {
       if(!article) {
@@ -446,6 +552,9 @@ app.delete('/api/articles/:id', bruteforce.prevent, checkUser, function (req, re
         return res.send({ error: 'Not found' });
       }
       return article.remove(function (err) {
+        article.images.map(function(imgObj){
+          fs.unlink(path.join(__dirname, '../public/uploads/' + imgObj.url), log.info(imgObj.url + ' deleted with its parent article'));
+        });
         if (!err) {
           log.info("article removed");
           return res.send({ status: 'OK' });
