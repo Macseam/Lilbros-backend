@@ -3,6 +3,7 @@ let fs = require('fs');
 const mime = require('mime-kind');
 
 const uuidV1 = require('uuid/v1');
+let moment = require('moment');
 let config = require('../libs/config');
 let path = require('path');
 let log = require('../libs/log')(module);
@@ -14,6 +15,7 @@ let ExpressBrute = require('express-brute');
 let BruteMongooseStore = require('express-brute-mongoose');
 let bodyParser = require('body-parser');
 let multer  = require('multer');
+let helmet = require('helmet');
 let upload = multer({
   storage: multer.diskStorage(
     {
@@ -65,12 +67,19 @@ let sess = {
   store: new MongoStore({mongooseConnection})
 };
 
-let bruteforce = new ExpressBrute(BruteForceStore);
+moment.locale('ru');
+
+let failCallback = function (req, res, next, nextValidRequestDate) {
+  res.status(403).send({error: "Превышено допустимое количество попыток входа, следующая попытка "+ moment(nextValidRequestDate).fromNow()});
+};
+
+let bruteforce = new ExpressBrute(BruteForceStore, {freeRetries: 5, failCallback: failCallback});
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session(sess));
 app.use(express.static(path.join(__dirname, '../public')));
+app.use(helmet());
 
 let checkUser = require('./middleware');
 
@@ -200,7 +209,7 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res)
     if(!useracc) {
       log.error('access denied, wrong login/password! ' + req.body.username + ' : ' + req.body.password);
       res.statusCode = 403;
-      return res.send({ error: 'access denied, wrong login/password' });
+      return res.send({ error: 'Неверный логин/пароль' });
     }
     else {
       log.info('user named ' + useracc.username + ' is found');
@@ -329,7 +338,7 @@ app.get('/api/details/:id', function (req, res) {
   });
 });
 
-app.post('/api/articles', /*bruteforce.prevent, */checkUser, upload.single('cover'), function (req, res) {
+app.post('/api/articles', checkUser, upload.single('cover'), function (req, res) {
   let receivedBody;
   if (req.body && req.body.body) {
     receivedBody = JSON.parse(req.body.body);
@@ -408,9 +417,29 @@ app.post('/api/articles', /*bruteforce.prevent, */checkUser, upload.single('cove
       readStream.destroy();
     });
   }
+  else {
+    article.save(function (err) {
+      if (!err) {
+        log.info('article created');
+        return res.send({status: 'OK', article: article});
+      }
+      else {
+        log.error(err);
+        if (err.name === 'ValidationError') {
+          res.statusCode = 400;
+          res.send({error: 'Validation error'});
+        }
+        else {
+          res.statusCode = 500;
+          res.send({error: 'Server error'});
+        }
+        log.error('Internal error(%d): %s', res.statusCode, err.message);
+      }
+    });
+  }
 });
 
-app.put('/api/articles/:id', /*bruteforce.prevent, */checkUser, upload.single('cover'), function (req, res) {
+app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, res) {
   let receivedBody;
   if (req.body && req.body.body) {
     receivedBody = JSON.parse(req.body.body);
@@ -544,7 +573,7 @@ app.put('/api/articles/:id', /*bruteforce.prevent, */checkUser, upload.single('c
   });
 });
 
-app.delete('/api/articles/:id', /*bruteforce.prevent, */checkUser, function (req, res) {
+app.delete('/api/articles/:id', checkUser, function (req, res) {
   if (req.params.id) {
     return ArticleModel.findById(req.params.id, function (err, article) {
       if(!article) {
