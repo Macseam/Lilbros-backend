@@ -381,7 +381,7 @@ app.post('/api/articles', checkUser, upload.single('cover'), function (req, res)
       if (realMimeType) {
         log.info('final mime: ' + realMimeType.mime);
       }
-      if (realMimeType && realMimeType.mime === 'image/jpeg') {
+      if (realMimeType && (realMimeType.mime === 'image/jpeg' || realMimeType.mime === 'image/png')) {
         thumb({
           source: receivedFile,
           width: 400,
@@ -412,7 +412,7 @@ app.post('/api/articles', checkUser, upload.single('cover'), function (req, res)
         });
       }
       else {
-        fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg image'));
+        fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg/png image'));
       }
       readStream.destroy();
     });
@@ -487,7 +487,7 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
         if (realMimeType) {
           log.info('final mime: ' + realMimeType.mime);
         }
-        if (realMimeType && realMimeType.mime === 'image/jpeg') {
+        if (realMimeType && (realMimeType.mime === 'image/jpeg' || realMimeType.mime === 'image/png')) {
 
           // If cover image exists, delete it
           if (!_.isEmpty(article.images)) {
@@ -533,7 +533,7 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
           });
         }
         else {
-          fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg image'));
+          fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg/png image'));
         }
         readStream.destroy();
       });
