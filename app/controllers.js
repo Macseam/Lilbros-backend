@@ -569,6 +569,26 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
         }
       });
     }
+    else {
+      article.save(function (err) {
+        if (!err) {
+          log.info('article saved');
+          return res.send({status: 'OK', article: article});
+        }
+        else {
+          log.error(err);
+          if (err.name === 'ValidationError') {
+            res.statusCode = 400;
+            res.send({error: 'Validation error'});
+          }
+          else {
+            res.statusCode = 500;
+            res.send({error: 'Server error'});
+          }
+          log.error('Internal error(%d): %s', res.statusCode, err.message);
+        }
+      });
+    }
 
   });
 });
