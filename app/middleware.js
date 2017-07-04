@@ -14,7 +14,7 @@ const MongoStore = require('connect-mongo')(session);
 
 let app = express();
 
-/* =========== Setting up middleware options */
+/* =========== Настраиваем middleware */
 
 let sess = {
   genid: function(req) {
@@ -26,42 +26,47 @@ let sess = {
   store: new MongoStore({mongooseConnection})
 };
 
-/* =========== Including middleware */
+/* =========== Применяем middleware */
 
 app.use(session(sess));
 
 function checkUser(req, res, next) {
   let sess = req.session;
   if (sess.user_id) {
-    log.info('searching for session id ' + sess.user_id);
-    UserModel.findById(sess.user_id, function(err, useracc) {
-      /* Checking user id in session */
-      if (useracc && req.headers['authorization']) {
-        const jwtKey = 'JoelAndEllie';
-        let receivedToken = req.headers['authorization'].split(' ');
-        const decodedJwt = receivedToken[1].split('.');
-        const jwtSignature = CryptoJS.SHA256(decodedJwt[0] + '.' + decodedJwt[1], jwtKey);
-        let isValid = false;
-        decodedJwt.map(function(decItem, index) {
-          if (new Buffer(decItem, 'base64').toString('ascii') === JSON.stringify(jwtSignature)) {
-            isValid = true;
+    log.info('ищем айдишник пользователя ' + sess.user_id);
+    UserModel.findById(sess.user_id)
+      .then(function(useracc){
+        log.info('есть совпадение айдишника с данными в базе');
+
+        // Проверяем user id в сессии и JWT в шапке запроса
+        if (useracc && req.headers['authorization']) {
+          const jwtKey = 'JoelAndEllie';
+          let receivedToken = req.headers['authorization'].split(' ');
+          const decodedJwt = receivedToken[1].split('.');
+          const jwtSignature = CryptoJS.SHA256(decodedJwt[0] + '.' + decodedJwt[1], jwtKey);
+          let isValid = false;
+          decodedJwt.map(function(decItem, index) {
+            if (new Buffer(decItem, 'base64').toString('ascii') === JSON.stringify(jwtSignature)) {
+              isValid = true;
+            }
+          });
+          if (isValid) {
+            log.info('токен ок');
+            res.status(200);
+            next();
           }
-        });
-        if (isValid) {
-          res.status(200);
-          next();
+          else {
+            log.warn('неверный токен');
+            res.status(403).send('доступ закрыт');
+          }
+        } else {
+          log.warn('пользователь не найден');
+          res.status(403).send('доступ закрыт');
         }
-        else {
-          log.warn('invalid token');
-          res.status(403).send('access denied');
-        }
-      } else {
-        log.warn('no matched user');
-        res.status(403).send('access denied');
-      }
-    });
+      })
+      .catch(next);
   } else {
-    log.warn('no user_id available in session');
+    log.warn('В сессии не найдено информации о пользователе');
     res.status(200);
     next();
   }

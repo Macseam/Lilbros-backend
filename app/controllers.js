@@ -1,7 +1,9 @@
+'use strict';
+let P = require('bluebird');
 let _ = require('lodash');
 let fs = require('fs');
 const mime = require('mime-kind');
-
+let compression = require('compression');
 const uuidV1 = require('uuid/v1');
 let moment = require('moment');
 let config = require('../libs/config');
@@ -26,13 +28,7 @@ let upload = multer({
         cb(null, file.fieldname + '-' + Date.now() + '.jpg')
       }
     }
-  ),
-  fileFilter: (req, file, cb)=>{
-    cb(null, file.mimetype.indexOf('image/') !== -1);
-    if (file.mimetype.indexOf('image/') === -1) {
-      cb(new Error('Attempt to upload non-image file'));
-    }
-  }
+  )
 });
 let thumb = require('node-thumbnail').thumb;
 let UserModel = require('../libs/mongoose').UserModel;
@@ -45,7 +41,10 @@ let BruteForceStore = new BruteMongooseStore(BruteForceModel);
 
 let app = express();
 
-/* =========== Setting up middleware options */
+/* =========== Выставляем начальные настройки */
+
+P.promisifyAll(fs);
+let maxUsersCount = 1;
 
 let corsOptions = {
   origin: true,
@@ -69,8 +68,84 @@ let sess = {
 
 moment.locale('ru');
 
+// Функция проверки формата изображения
+
+const checkImages = function(req, res, next, receivedFile, realMimeType, article) {
+
+  // Создаём стрим файла
+  let readStream = fs.createReadStream(receivedFile);
+
+// Если есть ошибка - выводим её
+  readStream.on('error', function(err) {
+    log.error(err);
+  });
+
+// Если стрим готов для чтения, читаем его и проверяем на данные, которые могут дать информацию о формате файла
+  readStream.on('readable', function() {
+    let data = readStream.read();
+    if (!realMimeType) {
+      realMimeType = mime(data);
+    }
+  });
+
+// При завершении чтения стрима при правильном mime-type создаём миниатюру и сохраняем в images
+// Если mime-type не подходит, удаляем изображение
+  readStream.on('end', ()=> {
+    if (realMimeType) {
+      log.info('mime-type файла: ' + realMimeType.mime);
+    }
+    if (realMimeType && (realMimeType.mime === 'image/jpeg' || realMimeType.mime === 'image/png')) {
+
+      if (!_.isEmpty(article.images)) {
+        article.images.map(function(imgObj){
+          fs.statAsync(path.join(__dirname, '../public/uploads/' + imgObj.url))
+            .then(function() {
+              return fs.unlink(
+                path.join(__dirname, '../public/uploads/' + imgObj.url),
+                log.info(imgObj.url + ' - файл удалён, заменён новым')
+              );
+            })
+            .catch(next);
+        });
+        article.images = [{kind: 'cover', url: req.file.filename}];
+      }
+
+      thumb({
+        source: receivedFile,
+        width: 400,
+        'destination': path.join(__dirname, '../public/uploads')
+      })
+        .then(function(files) {
+          article.images.push({kind: 'thumb', url: files[0].dstPath.split('/').slice(-1).join('')});
+          log.info('Миниатюра успешно создана');
+          return saveArticle(req, res, next, article);
+        })
+        .catch(next);
+    }
+    else {
+      fs.unlink(receivedFile, log.warn(receivedFile + ' - файл удален, формат не jpeg/png'));
+      return saveArticle(req, res, next, article);
+    }
+    readStream.destroy();
+  });
+};
+
+const saveArticle = function(req, res, next, article) {
+  return article.save()
+    .then(function () {
+      log.info('Запись успешно обновлена');
+      return res.send({
+        status: 'запись успешно обновлена',
+        article: article
+      });
+    })
+    .catch(next);
+};
+
 let failCallback = function (req, res, next, nextValidRequestDate) {
-  res.status(403).send({error: "Превышено допустимое количество попыток входа, следующая попытка "+ moment(nextValidRequestDate).fromNow()});
+  res.status(403).send({
+    error: "Превышено допустимое количество попыток входа, следующая попытка " + moment(nextValidRequestDate).fromNow()
+  });
 };
 
 let bruteforce = new ExpressBrute(BruteForceStore, {freeRetries: 5, failCallback: failCallback});
@@ -80,42 +155,46 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session(sess));
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(helmet());
+app.use(compression());
 
 let checkUser = require('./middleware');
 
-/* =========== Setting up routing */
+/* =========== Роутинг */
+
+// Завершение сессии пользователя
 
 app.get('/logout', function (req, res) {
   let sess = req.session;
+  let userId = sess.user_id;
   if (sess.user_id && res.statusCode === 200) {
     req.session.regenerate(function(err) {
       if (!err) {
         res.redirect('/api');
+        log.info('удаление айди пользователя ' + userId + ' из сессии выполнено успешно');
       }
       else {
-        res.send('unable to destroy session: ' + err);
+        res.send('сессию удалить не удалось: ' + err);
       }
     });
   }
   else if (res.statusCode === 200) {
-    res.send('no logged user to log out');
+    res.send('в сессии и так нет данных о пользователе');
   }
   else {
-    res.status(403).send('access denied');
+    res.status(403).send('доступ закрыт');
   }
 });
 
-app.get('/api', function (req, res) {
+// Проверяем, есть ли в сессии инфа о пользователе
+
+app.get('/api', function (req, res, next) {
   let sess = req.session;
   if (sess.user_id && res.statusCode === 200) {
-    UserModel.findById(sess.user_id, function(err, useracc) {
-      if (!err) {
-        res.send(useracc.username);
-      }
-      else {
-        res.status(403).send('access denied');
-      }
-    });
+    UserModel.findById(sess.user_id)
+      .then(function(useracc) {
+        return res.send(useracc.username);
+      })
+      .catch(next);
   }
   else if (res.statusCode === 200) {
     res.end();
@@ -125,141 +204,139 @@ app.get('/api', function (req, res) {
   }
 });
 
-app.get('/api/getuserslist', function (req, res) {
-  return UserModel.find(function (err, users) {
-    if (!err) {
-      return res.send(users);
-    }
-    else {
-      res.statusCode = 500;
-      log.error('Internal error(%d): %s', res.statusCode, err.message);
-      return res.send({error: 'Server error'});
-    }
-  });
+// Получаем список всех пользователей
+
+app.get('/api/getuserslist', function (req, res, next) {
+  UserModel.find()
+    .then(function(users) {
+      res.send(users);
+    })
+    .catch(next);
 });
 
-app.post('/api/setnewuser', bruteforce.prevent, function (req, res) {
-  return UserModel.find(function (err, userAccount) {
-    if (!err && userAccount && userAccount.length === 0) {
-      let useracc = new UserModel({
-        username: req.body.username || null,
-        email: req.body.email || null,
-        password: req.body.password || null,
-      });
-      useracc.save(function (err) {
-        if (!err) {
-          log.info('user created');
-          return res.send({status: 'OK', useracc: useracc});
-        }
-        else {
-          log.error(err);
-          if (err.name === 'ValidationError') {
-            res.statusCode = 400;
-            res.send({error: 'Validation error'});
-          }
-          else {
-            res.statusCode = 500;
-            res.send({error: 'Server error'});
-          }
-          log.error('Internal error(%d): %s', res.statusCode, err.message);
-        }
-      });
-    }
-    else if (!err && userAccount && userAccount.length > 0) {
-      res.statusCode = 500;
-      res.send({error: 'Server error'});
-    }
-    else {
-      log.error(err);
-      if (err.name === 'ValidationError') {
-        res.statusCode = 400;
-        res.send({error: 'Validation error'});
+// Заводим нового пользователя (если пользователей меньше, чем maxUsersCount)
+
+app.post('/api/setnewuser', function (req, res, next) {
+  UserModel.find()
+    .then(function(userAccount) {
+      if (userAccount && userAccount.length < maxUsersCount) {
+        let useracc = new UserModel({
+          username: req.body.username || null,
+          email: req.body.email || null,
+          password: req.body.password || null,
+        });
+        return useracc.save()
+          .then(function () {
+            log.info('Пользователь успешно создан');
+            return res.send({
+              status: 'Пользователь успешно создан',
+              useracc: useracc
+            });
+          })
+          .catch(next);
+      }
+      else if (userAccount && userAccount.length >= maxUsersCount) {
+        return res.status(500).send({
+          error: 'Достигнуто максимальное количество пользователей'
+        });
       }
       else {
-        res.statusCode = 500;
-        res.send({error: 'Server error'});
+        return res.status(500).send({
+          error: 'Что-то пошло не так'
+        });
       }
-      log.error('Internal error(%d): %s', res.statusCode, err.message);
-    }
-  });
+    })
+    .catch(next);
 });
 
-app.delete('/api/deleteuser/:id', bruteforce.prevent, checkUser, function (req, res) {
-  return UserModel.findById(req.params.id, function (err, useracc) {
-    if(!useracc) {
-      res.statusCode = 404;
-      return res.send({ error: 'Not found' });
-    }
-    return useracc.remove(function (err) {
-      if (!err) {
-        log.info("article removed");
-        return res.send({ status: 'OK' });
-      } else {
-        res.statusCode = 500;
-        log.error('Internal error(%d): %s',res.statusCode,err.message);
-        return res.send({ error: 'Server error' });
+// Удаляем пользователя по id
+
+app.delete('/api/deleteuser/:id', function (req, res, next) {
+  return UserModel.findById(req.params.id)
+    .then(function(useracc) {
+      if(!useracc) {
+        res.statusCode = 404;
+        return res.send({
+          error: 'Данного пользователя и так не существует'
+        });
       }
-    });
-  });
+      return useracc.remove()
+        .then(function() {
+          log.info('Пользователь с айди ' + req.params.id + ' успешно удалён');
+          return res.send({
+            status: 'Пользователь успешно удалён'
+          });
+        })
+        .catch(next);
+    })
+    .catch(next);
 });
 
-app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res) {
+// Получаем с фронта логин-пароль, если совпадают с данными из базы, то создаём сессию и токен
+
+app.post('/api/sendauthinfo', /*bruteforce.prevent, */parseBody, function (req, res, next) {
   let sess = req.session;
-  return UserModel.findOne({ username: req.body.username }, function (err, useracc) {
-    if(!useracc) {
-      log.error('access denied, wrong login/password! ' + req.body.username + ' : ' + req.body.password);
-      res.statusCode = 403;
-      return res.send({ error: 'Неверный логин/пароль' });
-    }
-    else {
-      log.info('user named ' + useracc.username + ' is found');
-      useracc.comparePassword(req.body.password, function(err, isMatch) {
-        if (err) throw err;
-        if (isMatch) {
-          sess.user_id = useracc._id;
+  return UserModel.findOne({
+    username: req.body.username
+  })
+    .then(function(useracc) {
+      if(!useracc) {
+        log.error('В базе нет такой пары логин/пароль: ' + req.body.username + ' / ' + req.body.password);
+        res.statusCode = 403;
+        return res.send({
+          error: 'Неверный логин/пароль'
+        });
+      }
+      else {
+        log.info('Пользователь с именем ' + useracc.username + ' найден в базе');
 
-          const jwtHeader = {
-            "alg": "HS256",
-            "typ": "JWT"
-          };
-          const jwtPayload = {
-            "loggedUserId": sess.user_id,
-            "iat": Date.now()
-          };
-          const jwtKey = 'JoelAndEllie';
-          const jwtUnsigned = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
-            + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64');
-          const jwtSignature = CryptoJS.SHA256(jwtUnsigned, jwtKey);
+        // Сравниваем хэши пароля найденного у данного пользователя в базе и введённого в форму пароля
 
-          const jwtResult = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
-            + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
-            + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
+        return useracc.comparePassword(req.body.password, useracc.password)
+          .then(function(isMatch) {
+            if (isMatch) {
+              sess.user_id = useracc._id;
 
-          res.cookie('auth',jwtResult);
+              // Создаём JWT
 
-          return res.send(useracc.username);
-        }
-        else {
-          log.error('access denied, wrong login/password! ' + req.body.username + ' : ' + req.body.password);
-          res.status(403).send('access denied, wrong login/password');
-        }
-      });
-    }
-  });
+              const jwtHeader = {
+                "alg": "HS256",
+                "typ": "JWT"
+              };
+              const jwtPayload = {
+                "loggedUserId": sess.user_id,
+                "iat": Date.now()
+              };
+              const jwtKey = 'JoelAndEllie';
+              const jwtUnsigned = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+                + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64');
+              const jwtSignature = CryptoJS.SHA256(jwtUnsigned, jwtKey);
+
+              const jwtResult = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+                + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
+                + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
+
+              res.cookie('auth',jwtResult);
+              return res.send(useracc.username);
+            }
+            else {
+              log.error('В базе нет такой пары логин/пароль: ' + req.body.username + ' : ' + req.body.password);
+              return res.status(403).send({
+                error: 'Неверный логин/пароль'
+              });
+            }
+          })
+          .catch(next);
+      }
+    })
+    .catch(next);
 });
+
+// Отладочный роут для получения всех записей
 
 app.get('/api/articles', function (req, res) {
   let sess = req.session;
-  return ArticleModel.find(function (err, articles) {
-    if (!err) {
-      //return res.send(articles);
-    }
-    else {
-      res.statusCode = 500;
-      log.error('Internal error(%d): %s', res.statusCode, err.message);
-      return res.send({error: 'Server error'});
-    }
-  }).lean().exec(function(err, data){
+  return ArticleModel.find().lean().exec(function(err, data){
     if (sess.user_id) {
       data.forEach(function(item){
         item.deleteLink = 'api/articles/' + item._id;
@@ -269,76 +346,55 @@ app.get('/api/articles', function (req, res) {
   });
 });
 
-app.get('/api/toparticles', function (req, res) {
-  return ArticleModel.find({"parent": null},function (err, articles) {
-    if (!err) {
+// Получение всех записей верхнего уровня
+
+app.get('/api/toparticles', function (req, res, next) {
+  return ArticleModel.find({"parent": null})
+    .then(function (articles) {
       return res.send(articles);
-    }
-    else {
-      res.statusCode = 500;
-      log.error('Internal error(%d): %s', res.statusCode, err.message);
-      return res.send({error: 'Server error'});
-    }
-  });
+    })
+    .catch(next);
 });
 
-app.get('/sesstest', function (req, res) {
-  let resSess = req.session;
-  if (resSess.views) {
-    resSess.views++;
-    res.send('views: ' + resSess.views + ', ' + 'expires in: ' + (resSess.cookie.maxAge / 1000) + 's');
-  } else {
-    resSess.views = 1;
-    res.send('welcome to the session demo. refresh!');
-  }
-});
+// Получение всех записей у конкретного родителя
 
-app.get('/api/articles/:id', function (req, res) {
-  return ArticleModel.find({"slug": req.params.id}, function (err, article) {
-    if(!article) {
-      res.statusCode = 404;
-      return res.send({ error: 'Not found' });
-    }
-    if (!err) {
-      return ArticleModel.find({"parent": article[0]['_id']}, function (childErr, childArticle) {
-        if(!childArticle) {
-          res.statusCode = 404;
-          return res.send({ error: 'Not found' });
-        }
-        if (!childErr) {
+app.get('/api/articles/:id', function (req, res, next) {
+  return ArticleModel.find({"slug": req.params.id})
+    .then(function (article) {
+      if(!article) {
+        res.statusCode = 404;
+        return res.send({ error: 'Такие статьи не найдены' });
+      }
+      return ArticleModel.find({"parent": article[0]['_id']})
+        .then(function (childArticle) {
+          if(!childArticle) {
+            res.statusCode = 404;
+            return res.send({ error: 'Такие статьи не найдены' });
+          }
           return res.send(childArticle);
-        }
-        else {
-          res.statusCode = 500;
-          log.error('Internal error(%d): %s',res.statusCode,childErr.message);
-          return res.send({ error: 'Server error' });
-        }
-      })
-    } else {
-      res.statusCode = 500;
-      log.error('Internal error(%d): %s',res.statusCode,err.message);
-      return res.send({ error: 'Server error' });
-    }
-  });
+        })
+        .catch(next);
+    })
+    .catch(next);
 });
 
-app.get('/api/details/:id', function (req, res) {
-  return ArticleModel.findOne({"slug": req.params.id}, function (err, article) {
-    if(!article) {
-      res.statusCode = 404;
-      return res.send({ error: 'Not found' });
-    }
-    if (!err) {
+// Получение одной записи по id
+
+app.get('/api/details/:id', function (req, res, next) {
+  return ArticleModel.findOne({"slug": req.params.id})
+    .then(function (article) {
+      if(!article) {
+        res.statusCode = 404;
+        return res.send({ error: 'Not found' });
+      }
       return res.send(article);
-    } else {
-      res.statusCode = 500;
-      log.error('Internal error(%d): %s',res.statusCode,err.message);
-      return res.send({ error: 'Server error' });
-    }
-  });
+    })
+    .catch(next);
 });
 
-app.post('/api/articles', checkUser, upload.single('cover'), function (req, res) {
+// Отправка и сохранение в базу новой записи
+
+app.post('/api/articles', checkUser, upload.single('cover'), function (req, res, next) {
   let receivedBody;
   if (req.body && req.body.body) {
     receivedBody = JSON.parse(req.body.body);
@@ -358,88 +414,16 @@ app.post('/api/articles', checkUser, upload.single('cover'), function (req, res)
     let realMimeType = null;
     article.images = [{kind: 'cover', url: req.file.filename}];
     let receivedFile = path.join(__dirname, '../public/uploads/' + req.file.filename);
-
-    // Create stream from image file
-    let readStream = fs.createReadStream(receivedFile);
-
-    // On stream error - output error message
-    readStream.on('error', function(err) {
-      log.error(err);
-    });
-
-    // If stream is readable, read it and try to get mime type
-    readStream.on('readable', function() {
-      let data = readStream.read();
-      if (!realMimeType) {
-        realMimeType = mime(data);
-      }
-    });
-
-    // On stream end - if mime is right, create thumbnail and save article images
-    // if mime is wrong, delete image and do not save
-    readStream.on('end', ()=> {
-      if (realMimeType) {
-        log.info('final mime: ' + realMimeType.mime);
-      }
-      if (realMimeType && (realMimeType.mime === 'image/jpeg' || realMimeType.mime === 'image/png')) {
-        thumb({
-          source: receivedFile,
-          width: 400,
-          'destination': path.join(__dirname, '../public/uploads')
-        }).then(function(files) {
-          article.images.push({kind: 'thumb', url: files[0].dstPath.split('/').slice(-1).join('')});
-          article.save(function (err) {
-            if (!err) {
-              log.info('article created');
-              return res.send({status: 'OK', article: article});
-            }
-            else {
-              log.error(err);
-              if (err.name === 'ValidationError') {
-                res.statusCode = 400;
-                res.send({error: 'Validation error'});
-              }
-              else {
-                res.statusCode = 500;
-                res.send({error: 'Server error'});
-              }
-              log.error('Internal error(%d): %s', res.statusCode, err.message);
-            }
-          });
-          log.info('Successfully thumbnailed');
-        }).catch(function(e) {
-          log.error('Error while thumbnailing', e.toString());
-        });
-      }
-      else {
-        fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg/png image'));
-      }
-      readStream.destroy();
-    });
+    checkImages(req, res, next, receivedFile, realMimeType, article);
   }
   else {
-    article.save(function (err) {
-      if (!err) {
-        log.info('article created');
-        return res.send({status: 'OK', article: article});
-      }
-      else {
-        log.error(err);
-        if (err.name === 'ValidationError') {
-          res.statusCode = 400;
-          res.send({error: 'Validation error'});
-        }
-        else {
-          res.statusCode = 500;
-          res.send({error: 'Server error'});
-        }
-        log.error('Internal error(%d): %s', res.statusCode, err.message);
-      }
-    });
+    saveArticle(req, res, next, article);
   }
 });
 
-app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, res) {
+// Редактирование и сохранение в базу записи
+
+app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, res, next) {
   let receivedBody;
   if (req.body && req.body.body) {
     receivedBody = JSON.parse(req.body.body);
@@ -447,179 +431,83 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
   else {
     receivedBody = req.body;
   }
-  return ArticleModel.findById(req.params.id, function (err, article) {
-    if(!article) {
-      res.statusCode = 404;
-      return res.send({ error: 'Not found' });
-    }
-    article.title = receivedBody.title || article.title;
-    article.description = receivedBody.description || article.description;
-    article.author = receivedBody.author || article.author;
-    article.parent = receivedBody.parent || article.parent;
-    article.slug = receivedBody.slug || article.slug;
-
-    if (req.file) {
-
-      // Save article with new image
-      let realMimeType = null;
-
-      let receivedFile = path.join(__dirname, '../public/uploads/' + req.file.filename);
-
-      // Create stream from image file
-      let readStream = fs.createReadStream(receivedFile);
-
-      // On stream error - output error message
-      readStream.on('error', function(err) {
-        log.error(err);
-      });
-
-      // If stream is readable, read it and try to get mime type
-      readStream.on('readable', function() {
-        let data = readStream.read();
-        if (!realMimeType) {
-          realMimeType = mime(data);
-        }
-      });
-
-      // On stream end - if mime is right, create thumbnail and save article images
-      // if mime is wrong, delete image and do not save
-      readStream.on('end', ()=> {
-        if (realMimeType) {
-          log.info('final mime: ' + realMimeType.mime);
-        }
-        if (realMimeType && (realMimeType.mime === 'image/jpeg' || realMimeType.mime === 'image/png')) {
-
-          // If cover image exists, delete it
-          if (!_.isEmpty(article.images)) {
-            article.images.map(function(imgObj){
-              fs.stat(path.join(__dirname, '../public/uploads/' + imgObj.url), function (err, stats) {
-                if (err) {
-                  return console.error(err);
-                }
-                fs.unlink(path.join(__dirname, '../public/uploads/' + imgObj.url), log.info(imgObj.url + ' deleted because of overwriting'));
-              });
-            });
-          }
-
-          article.images = [{kind: 'cover', url: req.file.filename}];
-
-          thumb({
-            source: receivedFile,
-            width: 400,
-            'destination': path.join(__dirname, '../public/uploads')
-          }).then(function(files) {
-            article.images.push({kind: 'thumb', url: files[0].dstPath.split('/').slice(-1).join('')});
-            article.save(function (err) {
-              if (!err) {
-                log.info('article saved');
-                return res.send({status: 'OK', article: article});
-              }
-              else {
-                log.error(err);
-                if (err.name === 'ValidationError') {
-                  res.statusCode = 400;
-                  res.send({error: 'Validation error'});
-                }
-                else {
-                  res.statusCode = 500;
-                  res.send({error: 'Server error'});
-                }
-                log.error('Internal error(%d): %s', res.statusCode, err.message);
-              }
-            });
-            log.info('Successfully thumbnailed');
-          }).catch(function(e) {
-            log.error('Error while thumbnailing', e.toString());
-          });
-        }
-        else {
-          fs.unlink(receivedFile, log.warn(receivedFile + ' deleted because it was not a jpeg/png image'));
-        }
-        readStream.destroy();
-      });
-    }
-
-    // If there is no new image, delete existing image
-    else if (req.body.cover === 'null' && !_.isEmpty(article.images)) {
-      article.images.map(function(imgObj){
-        fs.stat(path.join(__dirname, '../public/uploads/' + imgObj.url), function (err, stats) {
-          if (err) {
-            return console.error(err);
-          }
-          fs.unlink(path.join(__dirname, '../public/uploads/' + imgObj.url), log.info(imgObj.url + ' deleted because an image deleted from ui'));
-        });
-      });
-      article.images = [];
-      article.save(function (err) {
-        if (!err) {
-          log.info('article saved');
-          return res.send({status: 'OK', article: article});
-        }
-        else {
-          log.error(err);
-          if (err.name === 'ValidationError') {
-            res.statusCode = 400;
-            res.send({error: 'Validation error'});
-          }
-          else {
-            res.statusCode = 500;
-            res.send({error: 'Server error'});
-          }
-          log.error('Internal error(%d): %s', res.statusCode, err.message);
-        }
-      });
-    }
-    else {
-      article.save(function (err) {
-        if (!err) {
-          log.info('article saved');
-          return res.send({status: 'OK', article: article});
-        }
-        else {
-          log.error(err);
-          if (err.name === 'ValidationError') {
-            res.statusCode = 400;
-            res.send({error: 'Validation error'});
-          }
-          else {
-            res.statusCode = 500;
-            res.send({error: 'Server error'});
-          }
-          log.error('Internal error(%d): %s', res.statusCode, err.message);
-        }
-      });
-    }
-
-  });
-});
-
-app.delete('/api/articles/:id', checkUser, function (req, res) {
-  if (req.params.id) {
-    return ArticleModel.findById(req.params.id, function (err, article) {
+  return ArticleModel.findById(req.params.id)
+    .then(function (article) {
       if(!article) {
         res.statusCode = 404;
-        return res.send({ error: 'Not found' });
-      }
-      return article.remove(function (err) {
-        article.images.map(function(imgObj){
-          fs.unlink(path.join(__dirname, '../public/uploads/' + imgObj.url), log.info(imgObj.url + ' deleted with its parent article'));
+        return res.send({
+          error: 'Запись не найдена'
         });
-        if (!err) {
-          log.info("article removed");
-          return res.send({ status: 'OK' });
-        } else {
-          res.statusCode = 500;
-          log.error('Internal error(%d): %s',res.statusCode,err.message);
-          return res.send({ error: 'Server error' });
+      }
+      article.title = receivedBody.title || article.title;
+      article.description = receivedBody.description || article.description;
+      article.author = receivedBody.author || article.author;
+      article.parent = receivedBody.parent || article.parent;
+      article.slug = receivedBody.slug || article.slug;
+
+      if (req.file) {
+        let realMimeType = null;
+        let receivedFile = path.join(__dirname, '../public/uploads/' + req.file.filename);
+        return checkImages(req, res, next, receivedFile, realMimeType, article);
+      }
+
+      // Если при сохранении не приходит изображение, значит, пользователь его удалил и надо удалять из папки
+      else if (req.body.cover === 'null' && !_.isEmpty(article.images)) {
+        article.images.map(function(imgObj){
+          fs.statAsync(path.join(__dirname, '../public/uploads/' + imgObj.url))
+            .then(function() {
+              fs.unlink(
+                path.join(__dirname, '../public/uploads/' + imgObj.url),
+                log.info(imgObj.url + ' - файл удалён пользователем через интерфейс')
+              );
+            })
+            .catch(next);
+        });
+        article.images = [];
+        return saveArticle(req, res, next, article);
+      }
+      else {
+        return saveArticle(req, res, next, article);
+      }
+
+    })
+    .catch(next);
+});
+
+app.delete('/api/articles/:id', checkUser, function (req, res, next) {
+  if (req.params.id) {
+    return ArticleModel.findById(req.params.id)
+      .then(function(article) {
+        if(!article) {
+          res.statusCode = 404;
+          return res.send({ error: 'Запись не найдена' });
         }
-      });
-    });
+        return article.remove()
+          .then(function () {
+            article.images.map(function(imgObj){
+              fs.unlink(
+                path.join(__dirname, '../public/uploads/' + imgObj.url),
+                log.info(imgObj.url + ' - файл удалён, потому что удалена родительская запись')
+              );
+            });
+            log.info("Запись успешно удалена");
+            return res.send({
+              status: 'Запись успешно удалена'
+            });
+          })
+          .catch(next);
+      })
+      .catch(next);
   } else {
     res.statusCode = 500;
     log.error('Internal error(%d): %s',res.statusCode,'no id supplied');
-    return res.send({ error: 'Server error' });
+    return res.send({
+      error: 'Неверно составленный запрос'
+    });
   }
 });
+
+// Отладочный роут для тестирования ошибок
 
 app.get('/ErrorExample', function (req, res, next) {
   next(new Error('Random error!'));
@@ -627,7 +515,7 @@ app.get('/ErrorExample', function (req, res, next) {
 
 /* =========== Error handling */
 
-app.use(function (req, res, next) {
+app.use(function (req, res) {
   res.status(404);
   log.debug('Not found URL: %s', req.url);
   res.send({error: 'Not found'});
@@ -642,7 +530,7 @@ app.use(function (err, req, res, next) {
   res.send('form tampered with');
 });
 
-app.use(function (err, req, res, next) {
+app.use(function (err, req, res) {
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
   res.send({error: err.message});

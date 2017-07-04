@@ -100,10 +100,14 @@ User.pre('save', function(next) {
   });
 });
 
-User.methods.comparePassword = function(candidatePassword, cb) {
-  bcrypt.compare(candidatePassword, this.password, function(err, isMatch) {
-    if (err) return cb(err);
-    cb(null, isMatch);
+User.methods.comparePassword = function(candidatePassword, basePassword) {
+  return new Promise(function (resolve, reject) {
+    bcrypt.compare(candidatePassword, basePassword, function (err, isMatch) {
+      if (err || !isMatch) {
+        return reject(err);
+      }
+      resolve(isMatch);
+    });
   });
 };
 
