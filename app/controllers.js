@@ -153,7 +153,6 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session(sess));
-app.use(express.static(path.join(__dirname, '../public')));
 app.use(helmet());
 app.use(compression());
 
@@ -522,12 +521,14 @@ app.get('*.js', function (req, res, next) {
 });
 
 app.get('/*', function (req, res, next) {
-  if (req.url.indexOf("/build/") === 0) {
+  if (req.url.indexOf("/build/") !== -1 || req.url.indexOf("/uploads/") !== -1) {
     res.setHeader("Cache-Control", "public, max-age=2592000");
     res.setHeader("Expires", new Date(Date.now() + 2592000000).toUTCString());
   }
   next();
 });
+
+app.use(express.static(path.join(__dirname, '../public')));
 
 /* =========== Обработка ошибок */
 
