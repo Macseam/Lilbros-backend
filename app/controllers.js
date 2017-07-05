@@ -513,11 +513,19 @@ app.get('/ErrorExample', function (req, res, next) {
   next(new Error('Random error!'));
 });
 
-// Обработка gzip-файлов
+// Обработка gzip-файлов и кэширование скриптов/медиафайлов
 
 app.get('*.js', function (req, res, next) {
   req.url = req.url + '.gz';
   res.set('Content-Encoding', 'gzip');
+  next();
+});
+
+app.get('/*', function (req, res, next) {
+  if (req.url.indexOf("/build/") === 0) {
+    res.setHeader("Cache-Control", "public, max-age=2592000");
+    res.setHeader("Expires", new Date(Date.now() + 2592000000).toUTCString());
+  }
   next();
 });
 
