@@ -513,7 +513,15 @@ app.get('/ErrorExample', function (req, res, next) {
   next(new Error('Random error!'));
 });
 
-/* =========== Error handling */
+// Обработка gzip-файлов
+
+app.get('*.js', function (req, res, next) {
+  req.url = req.url + '.gz';
+  res.set('Content-Encoding', 'gzip');
+  next();
+});
+
+/* =========== Обработка ошибок */
 
 app.use(function (req, res) {
   res.status(404);
