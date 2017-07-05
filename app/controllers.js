@@ -512,9 +512,10 @@ app.get('/ErrorExample', function (req, res, next) {
   next(new Error('Random error!'));
 });
 
-// Обработка gzip-файлов и кэширование скриптов/медиафайлов
+// Обработка статики (gzip и кэширование)
 
 app.get('*.js', function (req, res, next) {
+  console.log(req.url);
   req.url = req.url + '.gz';
   res.set('Content-Encoding', 'gzip');
   next();
