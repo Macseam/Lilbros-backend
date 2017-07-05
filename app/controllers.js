@@ -514,7 +514,7 @@ app.get('/ErrorExample', function (req, res, next) {
 
 // Обработка статики (gzip и кэширование)
 
-app.get('*.js', function (req, res, next) {
+app.get('/*.js', function (req, res, next) {
   console.log(req.url);
   req.url = req.url + '.gz';
   res.set('Content-Encoding', 'gzip');
@@ -522,6 +522,7 @@ app.get('*.js', function (req, res, next) {
 });
 
 app.get('/*', function (req, res, next) {
+  console.log(req.url);
   if (req.url.indexOf("/build/") !== -1 || req.url.indexOf("/uploads/") !== -1) {
     res.setHeader("Cache-Control", "public, max-age=2592000");
     res.setHeader("Expires", new Date(Date.now() + 2592000000).toUTCString());
