@@ -67,8 +67,8 @@ function checkUser(req, res, next) {
       .catch(next);
   } else {
     log.warn('В сессии не найдено информации о пользователе');
-    res.status(200);
-    next();
+    res.status(403).send('доступ закрыт');
+    //next();
   }
 }
 
