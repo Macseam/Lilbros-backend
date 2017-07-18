@@ -143,9 +143,7 @@ const saveArticle = function(req, res, next, article) {
 };
 
 let failCallback = function (req, res, next, nextValidRequestDate) {
-  res.status(403).send({
-    error: "Превышено допустимое количество попыток входа, следующая попытка " + moment(nextValidRequestDate).fromNow()
-  });
+  res.status(403).send("Превышено допустимое количество попыток входа, следующая попытка " + moment(nextValidRequestDate).fromNow());
 };
 
 let bruteforce = new ExpressBrute(BruteForceStore, {freeRetries: 5, failCallback: failCallback});
@@ -191,7 +189,9 @@ app.get('/api', function (req, res, next) {
   if (sess.user_id && res.statusCode === 200) {
     UserModel.findById(sess.user_id)
       .then(function(useracc) {
-        return res.send(useracc.username);
+        return res.send({
+          username: useracc.username
+        });
       })
       .catch(next);
   }
@@ -235,14 +235,10 @@ app.post('/api/setnewuser', function (req, res, next) {
           .catch(next);
       }
       else if (userAccount && userAccount.length >= maxUsersCount) {
-        return res.status(500).send({
-          error: 'Достигнуто максимальное количество пользователей'
-        });
+        return res.status(500).send('Достигнуто максимальное количество пользователей');
       }
       else {
-        return res.status(500).send({
-          error: 'Что-то пошло не так'
-        });
+        return res.status(500).send('Что-то пошло не так');
       }
     })
     .catch(next);
@@ -255,9 +251,7 @@ app.delete('/api/deleteuser/:id', function (req, res, next) {
     .then(function(useracc) {
       if(!useracc) {
         res.statusCode = 404;
-        return res.send({
-          error: 'Данного пользователя и так не существует'
-        });
+        return res.send('Данного пользователя и так не существует');
       }
       return useracc.remove()
         .then(function() {
@@ -282,9 +276,7 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent, */parseBody, function (req, 
       if(!useracc) {
         log.error('В базе нет такой пары логин/пароль: ' + req.body.username + ' / ' + req.body.password);
         res.statusCode = 403;
-        return res.send({
-          error: 'Неверный логин/пароль'
-        });
+        return res.send('Неверный логин/пароль');
       }
       else {
         log.info('Пользователь с именем ' + useracc.username + ' найден в базе');
@@ -320,9 +312,7 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent, */parseBody, function (req, 
             }
             else {
               log.error('В базе нет такой пары логин/пароль: ' + req.body.username + ' : ' + req.body.password);
-              return res.status(403).send({
-                error: 'Неверный логин/пароль'
-              });
+              return res.status(403).send('Неверный логин/пароль');
             }
           })
           .catch(next);
@@ -362,13 +352,13 @@ app.get('/api/articles/:id', function (req, res, next) {
     .then(function (article) {
       if(!article) {
         res.statusCode = 404;
-        return res.send({ error: 'Такие статьи не найдены' });
+        return res.send('Такие статьи не найдены');
       }
       return ArticleModel.find({"parent": article[0]['_id']})
         .then(function (childArticle) {
           if(!childArticle) {
             res.statusCode = 404;
-            return res.send({ error: 'Такие статьи не найдены' });
+            return res.send('Такие статьи не найдены');
           }
           return res.send(childArticle);
         })
@@ -384,7 +374,7 @@ app.get('/api/details/:id', function (req, res, next) {
     .then(function (article) {
       if(!article) {
         res.statusCode = 404;
-        return res.send({ error: 'Not found' });
+        return res.send('Запись не найдена');
       }
       return res.send(article);
     })
@@ -434,9 +424,7 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
     .then(function (article) {
       if(!article) {
         res.statusCode = 404;
-        return res.send({
-          error: 'Запись не найдена'
-        });
+        return res.send('Запись не найдена');
       }
       article.title = receivedBody.title || article.title;
       article.description = receivedBody.description || article.description;
@@ -479,7 +467,7 @@ app.delete('/api/articles/:id', checkUser, function (req, res, next) {
       .then(function(article) {
         if(!article) {
           res.statusCode = 404;
-          return res.send({ error: 'Запись не найдена' });
+          return res.send('Запись не найдена');
         }
         return article.remove()
           .then(function () {
@@ -500,9 +488,7 @@ app.delete('/api/articles/:id', checkUser, function (req, res, next) {
   } else {
     res.statusCode = 500;
     log.error('Internal error(%d): %s',res.statusCode,'no id supplied');
-    return res.send({
-      error: 'Неверно составленный запрос'
-    });
+    return res.send('Неверно составленный запрос');
   }
 });
 
@@ -529,7 +515,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use(function (req, res) {
   res.status(404);
   log.debug('Not found URL: %s', req.url);
-  res.send({error: 'Not found'});
+  res.send('Путь не найден');
 });
 
 app.use(function (err, req, res, next) {
@@ -544,7 +530,7 @@ app.use(function (err, req, res, next) {
 app.use(function (err, req, res) {
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
-  res.send({error: err.message});
+  res.send(err.message);
 });
 
 module.exports = app;

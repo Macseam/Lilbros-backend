@@ -24,7 +24,7 @@
     "mime": "^1.3.6",
     "mime-kind": "^2.0.1",
     "moment": "^2.18.1",
-    "mongoose": "^4.9.1",
+    "mongoose": "4.10.8",
     "multer": "^1.3.0",
     "nconf": "^0.8.4",
     "node-thumbnail": "^0.11.0",
