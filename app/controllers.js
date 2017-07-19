@@ -189,9 +189,7 @@ app.get('/api', function (req, res, next) {
   if (sess.user_id && res.statusCode === 200) {
     UserModel.findById(sess.user_id)
       .then(function(useracc) {
-        return res.send({
-          username: useracc.username
-        });
+        return res.send(useracc.username);
       })
       .catch(next);
   }
@@ -199,7 +197,7 @@ app.get('/api', function (req, res, next) {
     res.end();
   }
   else {
-    res.status(403).send('access denied');
+    res.status(403).send('Доступ закрыт');
   }
 });
 
@@ -350,13 +348,13 @@ app.get('/api/toparticles', function (req, res, next) {
 app.get('/api/articles/:id', function (req, res, next) {
   return ArticleModel.find({"slug": req.params.id})
     .then(function (article) {
-      if(!article) {
+      if(!article || _.isEmpty(article)) {
         res.statusCode = 404;
         return res.send('Такие статьи не найдены');
       }
       return ArticleModel.find({"parent": article[0]['_id']})
         .then(function (childArticle) {
-          if(!childArticle) {
+          if(!childArticle || _.isEmpty(childArticle)) {
             res.statusCode = 404;
             return res.send('Такие статьи не найдены');
           }
@@ -372,7 +370,7 @@ app.get('/api/articles/:id', function (req, res, next) {
 app.get('/api/details/:id', function (req, res, next) {
   return ArticleModel.findOne({"slug": req.params.id})
     .then(function (article) {
-      if(!article) {
+      if(!article || _.isEmpty(article)) {
         res.statusCode = 404;
         return res.send('Запись не найдена');
       }
