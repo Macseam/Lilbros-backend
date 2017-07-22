@@ -1,6 +1,5 @@
 let fs = require('fs');
 const mime = require('mime-kind');
-
 const uuidV1 = require('uuid/v1');
 let config = require('../libs/config');
 let path = require('path');
@@ -34,14 +33,15 @@ function checkUser(req, res, next) {
   let sess = req.session;
   if (sess.user_id) {
     log.info('ищем айдишник пользователя ' + sess.user_id);
-    UserModel.findById(sess.user_id)
+    UserModel.findById(sess.user_id).exec()
       .then(function(useracc){
         log.info('есть совпадение айдишника с данными в базе');
 
-        // Проверяем user id в сессии и JWT в шапке запроса
-        if (useracc && req.headers['authorization']) {
+        // Проверяем user id в сессии и JWT в куки
+        let secretCookie = req.cookies['Authorization'];
+        if (useracc && secretCookie) {
           const jwtKey = 'JoelAndEllie';
-          let receivedToken = req.headers['authorization'].split(' ');
+          let receivedToken = secretCookie.split(' ');
           const decodedJwt = receivedToken[1].split('.');
           const jwtSignature = CryptoJS.SHA256(decodedJwt[0] + '.' + decodedJwt[1], jwtKey);
           let isValid = false;
@@ -51,24 +51,26 @@ function checkUser(req, res, next) {
             }
           });
           if (isValid) {
-            log.info('токен ок');
+            log.info('проверка токена успешно пройдена');
             res.status(200);
-            next();
+            //return next();
+            return new Promise(function (resolve) {
+              resolve(next());
+            });
           }
           else {
             log.warn('неверный токен');
-            res.status(403).send('доступ закрыт');
+            return res.status(403).send('доступ закрыт');
           }
         } else {
           log.warn('пользователь не найден');
-          res.status(403).send('доступ закрыт');
+          return res.status(403).send('доступ закрыт');
         }
       })
       .catch(next);
   } else {
     log.warn('В сессии не найдено информации о пользователе');
-    res.status(403).send('доступ закрыт');
-    //next();
+    return res.status(403).send('доступ закрыт');
   }
 }
 

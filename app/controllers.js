@@ -2,6 +2,8 @@
 let P = require('bluebird');
 let _ = require('lodash');
 let fs = require('fs');
+let statAsync = P.promisify(fs.statSync);
+let cookieParser = require('cookie-parser');
 const mime = require('mime-kind');
 let compression = require('compression');
 const uuidV1 = require('uuid/v1');
@@ -43,7 +45,6 @@ let app = express();
 
 /* =========== Выставляем начальные настройки */
 
-P.promisifyAll(fs);
 let maxUsersCount = 1;
 
 let corsOptions = {
@@ -98,7 +99,7 @@ const checkImages = function(req, res, next, receivedFile, realMimeType, article
 
       if (!_.isEmpty(article.images)) {
         article.images.map(function(imgObj){
-          fs.statAsync(path.join(__dirname, '../public/uploads/' + imgObj.url))
+          statAsync(path.join(__dirname, '../public/uploads/' + imgObj.url))
             .then(function() {
               return fs.unlink(
                 path.join(__dirname, '../public/uploads/' + imgObj.url),
@@ -115,12 +116,12 @@ const checkImages = function(req, res, next, receivedFile, realMimeType, article
         width: 400,
         'destination': path.join(__dirname, '../public/uploads')
       })
-        .then(function(files) {
-          article.images.push({kind: 'thumb', url: files[0].dstPath.split('/').slice(-1).join('')});
-          log.info('Миниатюра успешно создана');
-          return saveArticle(req, res, next, article);
-        })
-        .catch(next);
+      .then(function(files) {
+        article.images.push({kind: 'thumb', url: files[0].dstPath.split('/').slice(-1).join('')});
+        log.info('Миниатюра успешно создана');
+        return saveArticle(req, res, next, article);
+      })
+      .catch(next);
     }
     else {
       fs.unlink(receivedFile, log.warn(receivedFile + ' - файл удален, формат не jpeg/png'));
@@ -132,12 +133,9 @@ const checkImages = function(req, res, next, receivedFile, realMimeType, article
 
 const saveArticle = function(req, res, next, article) {
   return article.save()
-    .then(function () {
-      log.info('Запись успешно обновлена');
-      return res.send({
-        status: 'запись успешно обновлена',
-        article: article
-      });
+    .then(function (article) {
+      log.info("Запись '" + article.title + "' успешно обновлена");
+      return res.send("Запись '" + article.title + "' успешно обновлена");
     })
     .catch(next);
 };
@@ -150,6 +148,7 @@ let bruteforce = new ExpressBrute(BruteForceStore, {freeRetries: 5, failCallback
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser());
 app.use(session(sess));
 app.use(helmet());
 app.use(compression());
@@ -166,6 +165,7 @@ app.get('/logout', function (req, res) {
   if (sess.user_id && res.statusCode === 200) {
     req.session.regenerate(function(err) {
       if (!err) {
+        res.clearCookie('Authorization', { path: '/' });
         res.redirect('/api');
         log.info('удаление айди пользователя ' + userId + ' из сессии выполнено успешно');
       }
@@ -206,7 +206,7 @@ app.get('/api', function (req, res, next) {
 app.get('/api/getuserslist', function (req, res, next) {
   UserModel.find()
     .then(function(users) {
-      res.send(users);
+      return res.send(users);
     })
     .catch(next);
 });
@@ -223,19 +223,18 @@ app.post('/api/setnewuser', function (req, res, next) {
           password: req.body.password || null,
         });
         return useracc.save()
-          .then(function () {
-            log.info('Пользователь успешно создан');
-            return res.send({
-              status: 'Пользователь успешно создан',
-              useracc: useracc
-            });
+          .then(function (user) {
+            log.info("Пользователь " + user.username + " успешно создан");
+            return res.send("Пользователь " + user.username + " успешно создан");
           })
           .catch(next);
       }
       else if (userAccount && userAccount.length >= maxUsersCount) {
+        log.info('Достигнуто максимальное количество пользователей');
         return res.status(500).send('Достигнуто максимальное количество пользователей');
       }
       else {
+        log.info('Что-то пошло не так');
         return res.status(500).send('Что-то пошло не так');
       }
     })
@@ -251,21 +250,21 @@ app.delete('/api/deleteuser/:id', function (req, res, next) {
         res.statusCode = 404;
         return res.send('Данного пользователя и так не существует');
       }
-      return useracc.remove()
-        .then(function() {
-          log.info('Пользователь с айди ' + req.params.id + ' успешно удалён');
-          return res.send({
-            status: 'Пользователь успешно удалён'
-          });
-        })
-        .catch(next);
+      else {
+        return useracc.remove()
+          .then(function(user) {
+            log.info("Пользователь " + user.username + " успешно удалён");
+            return res.send("Пользователь " + user.username + " успешно удалён");
+          })
+          .catch(next);
+      }
     })
     .catch(next);
 });
 
 // Получаем с фронта логин-пароль, если совпадают с данными из базы, то создаём сессию и токен
 
-app.post('/api/sendauthinfo', /*bruteforce.prevent, */parseBody, function (req, res, next) {
+app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res, next) {
   let sess = req.session;
   return UserModel.findOne({
     username: req.body.username
@@ -305,7 +304,11 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent, */parseBody, function (req, 
                 + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
                 + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
 
-              res.cookie('auth',jwtResult);
+              res.cookie('Authorization', 'Bearer ' + jwtResult,
+                {
+                  httpOnly: true
+                }
+              );
               return res.send(useracc.username);
             }
             else {
@@ -353,14 +356,12 @@ app.get('/api/articles/:id', function (req, res, next) {
         return res.send('Такие статьи не найдены');
       }
       return ArticleModel.find({"parent": article[0]['_id']})
-        .then(function (childArticle) {
-          if(!childArticle || _.isEmpty(childArticle)) {
-            res.statusCode = 404;
-            return res.send('Такие статьи не найдены');
-          }
-          return res.send(childArticle);
-        })
-        .catch(next);
+    })
+    .then(function (childArticle) {
+      if(!childArticle || _.isEmpty(childArticle)) {
+        return res.send([]);
+      }
+      return res.send(childArticle);
     })
     .catch(next);
 });
@@ -439,7 +440,7 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
       // Если при сохранении не приходит изображение, значит, пользователь его удалил и надо удалять из папки
       else if (req.body.cover === 'null' && !_.isEmpty(article.images)) {
         article.images.map(function(imgObj){
-          fs.statAsync(path.join(__dirname, '../public/uploads/' + imgObj.url))
+          statAsync(path.join(__dirname, '../public/uploads/' + imgObj.url))
             .then(function() {
               fs.unlink(
                 path.join(__dirname, '../public/uploads/' + imgObj.url),
@@ -461,26 +462,16 @@ app.put('/api/articles/:id', checkUser, upload.single('cover'), function (req, r
 
 app.delete('/api/articles/:id', checkUser, function (req, res, next) {
   if (req.params.id) {
-    return ArticleModel.findById(req.params.id)
+    return ArticleModel.findByIdAndRemove(req.params.id)
       .then(function(article) {
-        if(!article) {
-          res.statusCode = 404;
-          return res.send('Запись не найдена');
-        }
-        return article.remove()
-          .then(function () {
-            article.images.map(function(imgObj){
-              fs.unlink(
-                path.join(__dirname, '../public/uploads/' + imgObj.url),
-                log.info(imgObj.url + ' - файл удалён, потому что удалена родительская запись')
-              );
-            });
-            log.info("Запись успешно удалена");
-            return res.send({
-              status: 'Запись успешно удалена'
-            });
-          })
-          .catch(next);
+        article.images.map(function(imgObj){
+          fs.unlink(
+            path.join(__dirname, '../public/uploads/' + imgObj.url),
+            log.info(imgObj.url + ' - файл удалён, потому что удалена родительская запись')
+          );
+        });
+        log.info("Запись '" + article.title + "' успешно удалена");
+        return res.send("Запись '" + article.title + "' успешно удалена");
       })
       .catch(next);
   } else {
