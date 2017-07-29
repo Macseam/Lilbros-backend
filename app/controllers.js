@@ -266,60 +266,68 @@ app.delete('/api/deleteuser/:id', function (req, res, next) {
 
 app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res, next) {
   let sess = req.session;
-  return UserModel.findOne({
-    username: req.body.username
-  })
-    .then(function(useracc) {
-      if(!useracc) {
-        log.error('В базе нет такой пары логин/пароль: ' + req.body.username + ' / ' + req.body.password);
-        res.statusCode = 403;
-        return res.send('Неверный логин/пароль');
-      }
-      else {
-        log.info('Пользователь с именем ' + useracc.username + ' найден в базе');
-
-        // Сравниваем хэши пароля найденного у данного пользователя в базе и введённого в форму пароля
-
-        return useracc.comparePassword(req.body.password, useracc.password)
-          .then(function(isMatch) {
-            if (isMatch) {
-              sess.user_id = useracc._id;
-
-              // Создаём JWT
-
-              const jwtHeader = {
-                "alg": "HS256",
-                "typ": "JWT"
-              };
-              const jwtPayload = {
-                "loggedUserId": sess.user_id,
-                "iat": Date.now()
-              };
-              const jwtKey = 'JoelAndEllie';
-              const jwtUnsigned = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
-                + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64');
-              const jwtSignature = CryptoJS.SHA256(jwtUnsigned, jwtKey);
-
-              const jwtResult = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
-                + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
-                + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
-
-              res.cookie('Authorization', 'Bearer ' + jwtResult,
-                {
-                  httpOnly: true
-                }
-              );
-              return res.send(useracc.username);
-            }
-            else {
-              log.error('В базе нет такой пары логин/пароль: ' + req.body.username + ' : ' + req.body.password);
-              return res.status(403).send('Неверный логин/пароль');
-            }
-          })
-          .catch(next);
-      }
+  let receivedAuthHeader = req.header('Authorization');
+  if (receivedAuthHeader) {
+    receivedAuthHeader = new Buffer(receivedAuthHeader, 'base64').toString('ascii').split(':');
+    return UserModel.findOne({
+      username: receivedAuthHeader[0]
     })
-    .catch(next);
+      .then(function(useracc) {
+        if(!useracc) {
+          log.error('В базе нет такой пары логин/пароль: ' + receivedAuthHeader[0] + ' / ' + receivedAuthHeader[1]);
+          res.statusCode = 403;
+          return res.send('Неверный логин/пароль');
+        }
+        else {
+          log.info('Пользователь с именем ' + useracc.username + ' найден в базе');
+
+          // Сравниваем хэши пароля найденного у данного пользователя в базе и введённого в форму пароля
+
+          return useracc.comparePassword(receivedAuthHeader[1], useracc.password)
+            .then(function(isMatch) {
+              if (isMatch) {
+                sess.user_id = useracc._id;
+
+                // Создаём JWT
+
+                const jwtHeader = {
+                  "alg": "HS256",
+                  "typ": "JWT"
+                };
+                const jwtPayload = {
+                  "loggedUserId": sess.user_id,
+                  "iat": Date.now()
+                };
+                const jwtKey = 'JoelAndEllie';
+                const jwtUnsigned = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+                  + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64');
+                const jwtSignature = CryptoJS.SHA256(jwtUnsigned, jwtKey);
+
+                const jwtResult = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+                  + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
+                  + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
+
+                res.cookie('Authorization', 'Bearer ' + jwtResult,
+                  {
+                    httpOnly: true
+                  }
+                );
+                return res.send(useracc.username);
+              }
+              else {
+                log.error('В базе нет такой пары логин/пароль: ' + receivedAuthHeader[0] + ' : ' + receivedAuthHeader[1]);
+                return res.status(403).send('Неверный логин/пароль');
+              }
+            })
+            .catch(next);
+        }
+      })
+      .catch(next);
+  }
+  else {
+    res.statusCode = 403;
+    return res.send('Неверный логин/пароль');
+  }
 });
 
 // Отладочный роут для получения всех записей
