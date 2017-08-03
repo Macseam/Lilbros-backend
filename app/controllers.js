@@ -284,7 +284,6 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, 
 
           return useracc.comparePassword(receivedAuthHeader[1], useracc.password)
             .then(function(useracc) {
-              console.log('matched');
               sess.user_id = useracc._id;
 
               // Создаём JWT
@@ -311,6 +310,7 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, 
                   httpOnly: true
                 }
               );
+              console.log(useracc.username);
               return res.send(useracc.username);
             })
             .then(null, function() {
