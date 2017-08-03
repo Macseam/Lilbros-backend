@@ -316,7 +316,8 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res,
               }
               else {
                 log.error('В базе нет такой пары логин/пароль: ' + receivedAuthHeader[0] + ' : ' + receivedAuthHeader[1]);
-                return res.status(403).send('Неверный логин/пароль');
+                res.statusCode = 403;
+                return res.send('Неверный логин/пароль');
               }
             })
             .catch(next);
@@ -509,11 +510,11 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 /* =========== Обработка ошибок */
 
-/*app.use(function (req, res) {
+app.use(function (req, res) {
   res.status(404);
   log.debug('Not found URL: %s', req.url);
   res.send('Путь не найден');
-});*/
+});
 
 app.use(function (err, req, res, next) {
   if (err.code !== 'EBADCSRFTOKEN') {
@@ -525,8 +526,6 @@ app.use(function (err, req, res, next) {
 });
 
 app.use(function (err, req, res) {
-  console.log(err);
-  console.log(res);
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
   res.send(err.message);
