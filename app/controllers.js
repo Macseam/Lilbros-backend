@@ -284,41 +284,34 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res,
           // Сравниваем хэши пароля найденного у данного пользователя в базе и введённого в форму пароля
 
           return useracc.comparePassword(receivedAuthHeader[1], useracc.password)
-            .then(function(isMatch) {
-              if (isMatch) {
-                sess.user_id = useracc._id;
+            .then(function(useracc) {
+              sess.user_id = useracc._id;
 
-                // Создаём JWT
+              // Создаём JWT
 
-                const jwtHeader = {
-                  "alg": "HS256",
-                  "typ": "JWT"
-                };
-                const jwtPayload = {
-                  "loggedUserId": sess.user_id,
-                  "iat": Date.now()
-                };
-                const jwtKey = 'JoelAndEllie';
-                const jwtUnsigned = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
-                  + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64');
-                const jwtSignature = CryptoJS.SHA256(jwtUnsigned, jwtKey);
+              const jwtHeader = {
+                "alg": "HS256",
+                "typ": "JWT"
+              };
+              const jwtPayload = {
+                "loggedUserId": sess.user_id,
+                "iat": Date.now()
+              };
+              const jwtKey = 'JoelAndEllie';
+              const jwtUnsigned = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+                + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64');
+              const jwtSignature = CryptoJS.SHA256(jwtUnsigned, jwtKey);
 
-                const jwtResult = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
-                  + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
-                  + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
+              const jwtResult = new Buffer(JSON.stringify(jwtHeader)).toString('base64')
+                + '.' + new Buffer(JSON.stringify(jwtPayload)).toString('base64')
+                + '.' + new Buffer(JSON.stringify(jwtSignature)).toString('base64');
 
-                res.cookie('Authorization', 'Bearer ' + jwtResult,
-                  {
-                    httpOnly: true
-                  }
-                );
-                return res.send(useracc.username);
-              }
-              else {
-                log.error('В базе нет такой пары логин/пароль: ' + receivedAuthHeader[0] + ' : ' + receivedAuthHeader[1]);
-                res.statusCode = 403;
-                return res.send('Неверный логин/пароль');
-              }
+              res.cookie('Authorization', 'Bearer ' + jwtResult,
+                {
+                  httpOnly: true
+                }
+              );
+              return res.send(useracc.username);
             })
             .catch(next);
         }
