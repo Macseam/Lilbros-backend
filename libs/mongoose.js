@@ -104,7 +104,7 @@ User.methods.comparePassword = function(candidatePassword, basePassword) {
   return new Promise(function (resolve, reject) {
     bcrypt.compare(candidatePassword, basePassword, function (err, isMatch) {
       if (err || !isMatch) {
-        let error = new Error('Неверный пароль');
+        let error = new Error('Неверный логин/пароль');
         error.code = 403;
         return reject(error);
       }

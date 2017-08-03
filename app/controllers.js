@@ -312,7 +312,10 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, 
               );
               return res.send(useracc.username);
             })
-            .catch(next);
+            .then(null, function() {
+              console.log('dark place');
+              return next;
+            });
         }
       })
       .catch(next);
