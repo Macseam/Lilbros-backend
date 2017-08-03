@@ -313,8 +313,7 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, 
               return res.send(useracc.username);
             })
             .then(null, function() {
-              console.log('dark place');
-              return next;
+              return res.status(403).send('Неверный логин/пароль');
             });
         }
       })
