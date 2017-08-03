@@ -525,7 +525,8 @@ app.use(function (err, req, res, next) {
 });
 
 app.use(function (err, req, res) {
-  console.log(req);
+  console.log(err);
+  console.log(res);
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
   res.send(err.message);
