@@ -503,8 +503,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 /* =========== Обработка ошибок */
 
-app.use(function (err, req, res) {
-  console.log(err);
+app.use(function (req, res) {
   res.status(404);
   log.debug('Not found URL: %s', req.url);
   res.send('Путь не найден');
