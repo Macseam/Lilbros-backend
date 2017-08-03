@@ -310,7 +310,6 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, 
                   httpOnly: true
                 }
               );
-              console.log(useracc);
               return res.send(useracc.username);
             })
             .catch(function() {
@@ -504,15 +503,14 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 /* =========== Обработка ошибок */
 
-app.use(function (req, res) {
-  console.log('500');
+app.use(function (err, req, res) {
+  console.log(err);
   res.status(404);
   log.debug('Not found URL: %s', req.url);
   res.send('Путь не найден');
 });
 
 app.use(function (err, req, res) {
-  console.log('500');
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
   res.send(err.message);
