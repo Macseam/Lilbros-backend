@@ -275,8 +275,7 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res,
       .then(function(useracc) {
         if(!useracc) {
           log.error('В базе нет такой пары логин/пароль: ' + receivedAuthHeader[0] + ' / ' + receivedAuthHeader[1]);
-          res.statusCode = 403;
-          return res.send('Неверный логин/пароль');
+          return res.status(403).send('Неверный логин/пароль');
         }
         else {
           log.info('Пользователь с именем ' + useracc.username + ' найден в базе');
@@ -319,8 +318,7 @@ app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res,
       .catch(next);
   }
   else {
-    res.statusCode = 403;
-    return res.send('Неверный логин/пароль');
+    return res.status(403).send('Неверный логин/пароль');
   }
 });
 
