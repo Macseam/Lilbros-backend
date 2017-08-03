@@ -310,10 +310,10 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, 
                   httpOnly: true
                 }
               );
-              console.log(useracc.username);
+              console.log(useracc);
               return res.send(useracc.username);
             })
-            .then(null, function() {
+            .catch(function() {
               return res.status(403).send('Неверный логин/пароль');
             });
         }
