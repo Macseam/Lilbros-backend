@@ -509,12 +509,11 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 /* =========== Обработка ошибок */
 
-app.use(function (err, req, res) {
-  console.log(err);
+/*app.use(function (req, res) {
   res.status(404);
   log.debug('Not found URL: %s', req.url);
   res.send('Путь не найден');
-});
+});*/
 
 app.use(function (err, req, res, next) {
   if (err.code !== 'EBADCSRFTOKEN') {
@@ -526,6 +525,7 @@ app.use(function (err, req, res, next) {
 });
 
 app.use(function (err, req, res) {
+  console.log(req);
   res.status(err.status || 500);
   log.error('Internal error(%d): %s', res.statusCode, err.message);
   res.send(err.message);
