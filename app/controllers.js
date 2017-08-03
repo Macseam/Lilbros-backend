@@ -283,7 +283,7 @@ app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, 
           // Сравниваем хэши пароля найденного у данного пользователя в базе и введённого в форму пароля
 
           return useracc.comparePassword(receivedAuthHeader[1], useracc.password)
-            .then(function(useracc) {
+            .then(function() {
               sess.user_id = useracc._id;
 
               // Создаём JWT
