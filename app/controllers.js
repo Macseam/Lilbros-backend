@@ -264,7 +264,7 @@ app.delete('/api/deleteuser/:id', function (req, res, next) {
 
 // Получаем с фронта логин-пароль, если совпадают с данными из базы, то создаём сессию и токен
 
-app.post('/api/sendauthinfo', bruteforce.prevent, parseBody, function (req, res, next) {
+app.post('/api/sendauthinfo', /*bruteforce.prevent,*/ parseBody, function (req, res, next) {
   let sess = req.session;
   let receivedAuthHeader = req.header('Authorization');
   if (receivedAuthHeader) {
