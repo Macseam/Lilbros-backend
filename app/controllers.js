@@ -152,7 +152,6 @@ app.use(cookieParser());
 app.use(session(sess));
 app.use(helmet());
 app.use(compression());
-app.use(require('prerender-node').set('prerenderToken', 'eMeu9UYLUGFFaLcalkvs'));
 
 let checkUser = require('./middleware');
 
